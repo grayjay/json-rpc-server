@@ -9,5 +9,5 @@ cabal-version:       >=1.8
 
 Library
   exposed-modules:     JsonRpcServer
-  build-depends:       base, aeson, happstack-lite, mtl, text, attoparsec, unordered-containers
+  build-depends:       base, aeson, mtl, text, attoparsec, unordered-containers
   hs-source-dirs:      src
