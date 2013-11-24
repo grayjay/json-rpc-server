@@ -6,16 +6,15 @@
 , OverloadedStrings #-}
 
 module JsonRpcServer ( RpcResult(..)
-               , RpcError(..)
-               , Param(..)
-               , MethodParams
-               , JsonFunction
-               , toJsonFunction
-               , JsonFunctions
-               , toJsonFunctions
-               , call
-               , liftR
-               ) where
+                     , RpcError(..)
+                     , Param(..)
+                     , MethodParams
+                     , JsonFunction
+                     , toJsonFunction
+                     , JsonFunctions
+                     , toJsonFunctions
+                     , call
+                     , liftR) where
 
 import Data.Text hiding (map)
 import Data.Aeson
@@ -31,7 +30,7 @@ data RpcError = RpcError Int String Value
               deriving Show
 
 instance Error RpcError where
-    noMsg = RpcError 32000 "unknown error" Null
+    noMsg = strMsg "unknown error"
     strMsg msg = RpcError 32000 msg Null
 
 type RpcResult m a = ErrorT RpcError m a
