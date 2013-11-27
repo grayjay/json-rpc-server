@@ -53,10 +53,10 @@ class Monad m => MethodParams m a p | a -> m p where
 instance (ToJSON a, Monad m) => MethodParams m (RpcResult m a) () where
     mpApply r _ _ = liftM toJSON r
 
-instance (FromJSON a, Monad m, MethodParams m b p) => MethodParams m (a -> b) (Param a, p) where
+instance (FromJSON a, MethodParams m b p) => MethodParams m (a -> b) (Param a, p) where
     mpApply = applyFunction
 
-applyFunction :: (FromJSON a, Monad m, MethodParams m b p) => (a -> b)
+applyFunction :: (FromJSON a, MethodParams m b p) => (a -> b)
               -> (Param a, p)
               -> H.HashMap Text Value
               -> RpcResult m Value
@@ -68,7 +68,7 @@ applyFunction f ((Param pName d), ps) args = let arg = maybe d fromJSON' $ H.loo
                                                   Nothing -> fail "Cannot find required argument"
                                                   Just arg' -> mpApply (f arg') ps args
 
-method :: (Monad m, MethodParams m a p) => Text -> a -> p -> Method m a p
+method :: MethodParams m a p => Text -> a -> p -> Method m a p
 method = Method
 
 data Request = Request { rqName :: Text
@@ -110,10 +110,10 @@ data JsonFunction m = JsonFunction Text (H.HashMap Text Value -> RpcResult m Val
 
 newtype JsonFunctions m = JsonFunctions (H.HashMap Text (JsonFunction m))
 
-toJsonFunction :: (Monad m, MethodParams m a p) => Text -> a -> p -> JsonFunction m
+toJsonFunction :: MethodParams m a p => Text -> a -> p -> JsonFunction m
 toJsonFunction name f params = toJsonFunction' $ method name f params
 
-toJsonFunction' :: (Monad m, MethodParams m a p) => Method m a p -> JsonFunction m
+toJsonFunction' :: MethodParams m a p => Method m a p -> JsonFunction m
 toJsonFunction' (Method name f params) = JsonFunction name $ mpApply f params
 
 toJsonFunctions :: [JsonFunction m] -> JsonFunctions m
@@ -131,5 +131,5 @@ toResponse :: Maybe Id -> Either RpcError Value -> Maybe Response
 toResponse Nothing _ = Nothing
 toResponse (Just id) r = Just $ Response r id
 
-liftR :: (Monad m) => m a -> RpcResult m a
+liftR :: Monad m => m a -> RpcResult m a
 liftR = lift
