@@ -118,9 +118,10 @@ toJsonFunction' (Method name f params) = JsonFunction name $ mpApply f params
 toJsonFunctions :: [JsonFunction m] -> JsonFunctions m
 toJsonFunctions fs = JsonFunctions $ H.fromList $ map (\f@(JsonFunction n _) -> (n, f)) fs
 
-call :: Monad m => JsonFunctions m -> Value -> m Value
-call (JsonFunctions fs) x = (liftM $ (toJSON . toResponse id)) $ runErrorT $ f params
-    where Just (JsonFunction _ f) = H.lookup name fs
+call :: Monad m => JsonFunctions m -> Value -> m (Maybe Value)
+call (JsonFunctions fs) x = ((toJSON <$>) . toResponse id) `liftM` result
+    where result = runErrorT $ f params
+          Just (JsonFunction _ f) = H.lookup name fs
           params :: H.HashMap Text Value
           Success (Request name (Left params) id) = fromJSON x
 
