@@ -2,11 +2,12 @@
 , FunctionalDependencies
 , FlexibleInstances
 , UndecidableInstances
+, Rank2Types
 , KindSignatures
 , OverloadedStrings #-}
 
 module JsonRpcServer ( RpcResult(..)
-                     , RpcError(..)
+                     , RpcError
                      , Param(..)
                      , MethodParams
                      , JsonFunction
@@ -14,7 +15,10 @@ module JsonRpcServer ( RpcResult(..)
                      , JsonFunctions
                      , toJsonFunctions
                      , call
-                     , liftR) where
+                     , callWithBatchStrategy
+                     , liftR
+                     , rpcError
+                     , rpcErrorWithData) where
 
 import Data.Text hiding (map)
 import Data.String
@@ -65,7 +69,7 @@ applyFunction f ((Param pName d), ps) args = let arg = maybe d fromJSON' $ H.loo
                                                                  Error _ -> Nothing
                                                                  Success val -> Just val
                                              in case arg of
-                                                  Nothing -> fail "Cannot find required argument"
+                                                  Nothing -> throwError $ RpcError (-32602) "Cannot find required argument" Nothing
                                                   Just arg' -> mpApply (f arg') ps args
 
 method :: MethodParams m a p => Text -> a -> p -> Method m a p
@@ -120,7 +124,10 @@ toJsonFunctions :: [JsonFunction m] -> JsonFunctions m
 toJsonFunctions fs = JsonFunctions $ H.fromList $ map (\f@(JsonFunction n _) -> (n, f)) fs
 
 call :: Monad m => JsonFunctions m -> B.ByteString -> m (Maybe B.ByteString)
-call (JsonFunctions fs) x = (((encode . toJSON) <$>) . toResponse id) `liftM` result
+call = callWithBatchStrategy sequence
+
+callWithBatchStrategy :: Monad m => (forall a. [m a] -> m [a]) -> JsonFunctions m -> B.ByteString -> m (Maybe B.ByteString)
+callWithBatchStrategy strategey (JsonFunctions fs) x = (((encode . toJSON) <$>) . toResponse id) `liftM` result
     where Just val = decode x
           result = runErrorT $ f params
           Just (JsonFunction _ f) = H.lookup name fs
@@ -133,3 +140,9 @@ toResponse (Just id) r = Just $ Response r id
 
 liftR :: Monad m => m a -> RpcResult m a
 liftR = lift
+
+rpcError :: Int -> Text -> RpcError
+rpcError code msg = RpcError code msg Nothing
+
+rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
+rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData
