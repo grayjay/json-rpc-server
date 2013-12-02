@@ -62,8 +62,8 @@ applyFunction :: (FromJSON a, MethodParams m b p) => (a -> b)
               -> (Param a, p)
               -> H.HashMap Text Value
               -> RpcResult m Value
-applyFunction f ((Param pName d), ps) args = let arg = maybe d fromJSON' $ H.lookup pName args
-                                                 fromJSON' x = case fromJSON x of
+applyFunction f ((Param pName d), ps) args = let arg = maybe d parseArg $ H.lookup pName args
+                                                 parseArg x = case fromJSON x of
                                                                  Error _ -> Nothing
                                                                  Success val -> Just val
                                              in case arg of
