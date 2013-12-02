@@ -72,9 +72,6 @@ applyFunction f ((Param pName d), ps) args = let arg = maybe d fromJSON' $ H.loo
                                                   Nothing -> throwError $ RpcError (-32602) "Cannot find required argument" Nothing
                                                   Just arg' -> mpApply (f arg') ps args
 
-method :: MethodParams m a p => Text -> a -> p -> Method m a p
-method = Method
-
 data Request = Request { rqName :: Text
                        , rqParams :: Either Object Array
                        , rqId :: Maybe Id }
@@ -115,10 +112,7 @@ data JsonFunction m = JsonFunction Text (H.HashMap Text Value -> RpcResult m Val
 newtype JsonFunctions m = JsonFunctions (H.HashMap Text (JsonFunction m))
 
 toJsonFunction :: MethodParams m a p => Text -> a -> p -> JsonFunction m
-toJsonFunction name f params = toJsonFunction' $ method name f params
-
-toJsonFunction' :: MethodParams m a p => Method m a p -> JsonFunction m
-toJsonFunction' (Method name f params) = JsonFunction name $ mpApply f params
+toJsonFunction name f params = JsonFunction name $ mpApply f params
 
 toJsonFunctions :: [JsonFunction m] -> JsonFunctions m
 toJsonFunctions fs = JsonFunctions $ H.fromList $ map (\f@(JsonFunction n _) -> (n, f)) fs
