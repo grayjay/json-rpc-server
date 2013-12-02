@@ -49,8 +49,6 @@ type RpcResult m a = ErrorT RpcError m a
 data Param a = Param Text (Maybe a)
              deriving Show
 
-data Method (m :: * -> *) a p = Method Text a p
-
 class Monad m => MethodParams m a p | a -> m p where
     mpApply :: a -> p -> H.HashMap Text Value -> RpcResult m Value
 
