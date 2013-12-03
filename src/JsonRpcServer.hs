@@ -3,7 +3,6 @@
 , FlexibleInstances
 , UndecidableInstances
 , Rank2Types
-, KindSignatures
 , OverloadedStrings #-}
 
 module JsonRpcServer ( RpcResult(..)
@@ -129,21 +128,21 @@ callWithBatchStrategy strategy fs input = response2 response
                                 (Array vector) -> return $ ((toJSON <$>) `liftM` batchCall strategy fs (toList vector))
                                 _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String)))
           response2 r = case r of
-                          Left err@(RpcError _ _ _) -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err)
+                          Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err)
                           Right maybeVal -> (encode <$>) `liftM` maybeVal
           parseJson = maybe invalidJson return . decode
           invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
 
-invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
-
 singleCall :: Monad m => JsonFunctions m -> Value -> m (Maybe Response)
 singleCall (JsonFunctions fs) val = case fromJSON val of
-                                      Error msg -> return $ toResponse (Just IdNull) $ Left $ rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request" msg
+                                      Error msg -> return $ toResponse (Just IdNull) $ Left $ invalidJsonRpc $ Just msg
                                       Success (Request name (Left params) id) -> (toResponse id `liftM`) $ runErrorT $ do
                                                                                    JsonFunction _ f <- lookupMethod name
                                                                                    f params
     where lookupMethod name = maybe (methodNotFound name) return $ (H.lookup name fs)
           methodNotFound name = throwError $ rpcError (-32601) ("Method not found: " `append` name)
+
+invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
 
 batchCall :: Monad m => (forall a. [m a] -> m [a]) -> JsonFunctions m -> [Value] -> m (Maybe [Response])
 batchCall = undefined

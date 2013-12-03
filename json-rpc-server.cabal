@@ -11,3 +11,4 @@ Library
   exposed-modules:     JsonRpcServer
   build-depends:       base, aeson, mtl, text, vector, attoparsec, unordered-containers, bytestring
   hs-source-dirs:      src
+  ghc-options:         -Wall
