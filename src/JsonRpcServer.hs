@@ -20,6 +20,7 @@ module JsonRpcServer ( RpcResult(..)
                      , rpcErrorWithData) where
 
 import Data.Text hiding (map)
+import Data.Maybe (catMaybes)
 import Data.String
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
@@ -38,7 +39,7 @@ data RpcError = RpcError Int Text (Maybe Value)
 
 instance Error RpcError where
     noMsg = strMsg "unknown error"
-    strMsg msg = RpcError 32000 (fromString msg) Nothing
+    strMsg msg = RpcError (-32000) (fromString msg) Nothing
 
 instance ToJSON RpcError where
     toJSON (RpcError code msg data') = object pairs
@@ -123,10 +124,10 @@ callWithBatchStrategy :: Monad m => (forall a . [m a] -> m [a]) -> JsonFunctions
 callWithBatchStrategy strategy fs input = response2 response
     where response = runIdentity $ runErrorT $ do
                        json <- parseJson input
-                       (case json of
+                       case json of
                                 object@(Object _) -> return $ ((toJSON <$>)`liftM` singleCall fs object)
                                 (Array vector) -> return $ ((toJSON <$>) `liftM` batchCall strategy fs (toList vector))
-                                _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String)))
+                                _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String))
           response2 r = case r of
                           Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err)
                           Right maybeVal -> (encode <$>) `liftM` maybeVal
@@ -145,7 +146,11 @@ singleCall (JsonFunctions fs) val = case fromJSON val of
 invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
 
 batchCall :: Monad m => (forall a. [m a] -> m [a]) -> JsonFunctions m -> [Value] -> m (Maybe [Response])
-batchCall = undefined
+batchCall f gs vals = filterJust `liftM` results
+    where results = f $ map (singleCall gs) vals
+          filterJust vals = case catMaybes vals of
+                                 [] -> Nothing
+                                 xs -> Just xs
 
 toResponse :: Maybe Id -> Either RpcError Value -> Maybe Response
 toResponse Nothing _ = Nothing
