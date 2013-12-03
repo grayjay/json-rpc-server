@@ -25,10 +25,12 @@ import Data.String
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
 import Data.Aeson.Types
+import Data.Vector (toList)
 import Data.Attoparsec.Number
 import qualified Data.HashMap.Strict as H
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Identity
 import Control.Monad.Error
 import Prelude hiding (length)
 
@@ -118,13 +120,33 @@ toJsonFunctions fs = JsonFunctions $ H.fromList $ map (\f@(JsonFunction n _) -> 
 call :: Monad m => JsonFunctions m -> B.ByteString -> m (Maybe B.ByteString)
 call = callWithBatchStrategy sequence
 
-callWithBatchStrategy :: Monad m => (forall a. [m a] -> m [a]) -> JsonFunctions m -> B.ByteString -> m (Maybe B.ByteString)
-callWithBatchStrategy strategey (JsonFunctions fs) x = (((encode . toJSON) <$>) . toResponse id) `liftM` result
-    where Just val = decode x
-          result = runErrorT $ f params
-          Just (JsonFunction _ f) = H.lookup name fs
-          params :: H.HashMap Text Value
-          Success (Request name (Left params) id) = fromJSON val
+callWithBatchStrategy :: Monad m => (forall a . [m a] -> m [a]) -> JsonFunctions m -> B.ByteString -> m (Maybe B.ByteString)
+callWithBatchStrategy strategy fs input = response2 response
+    where response = runIdentity $ runErrorT $ do
+                       json <- parseJson input
+                       (case json of
+                                object@(Object _) -> return $ ((toJSON <$>)`liftM` singleCall fs object)
+                                (Array vector) -> return $ ((toJSON <$>) `liftM` batchCall strategy fs (toList vector))
+                                _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String)))
+          response2 r = case r of
+                          Left err@(RpcError _ _ _) -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err)
+                          Right maybeVal -> (encode <$>) `liftM` maybeVal
+          parseJson = maybe invalidJson return . decode
+          invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
+
+invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
+
+singleCall :: Monad m => JsonFunctions m -> Value -> m (Maybe Response)
+singleCall (JsonFunctions fs) val = case fromJSON val of
+                                      Error msg -> return $ toResponse (Just IdNull) $ Left $ rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request" msg
+                                      Success (Request name (Left params) id) -> (toResponse id `liftM`) $ runErrorT $ do
+                                                                                   JsonFunction _ f <- lookupMethod name
+                                                                                   f params
+    where lookupMethod name = maybe (methodNotFound name) return $ (H.lookup name fs)
+          methodNotFound name = throwError $ rpcError (-32601) ("Method not found: " `append` name)
+
+batchCall :: Monad m => (forall a. [m a] -> m [a]) -> JsonFunctions m -> [Value] -> m (Maybe [Response])
+batchCall = undefined
 
 toResponse :: Maybe Id -> Either RpcError Value -> Maybe Response
 toResponse Nothing _ = Nothing
