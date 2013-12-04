@@ -5,7 +5,7 @@
 , Rank2Types
 , OverloadedStrings #-}
 
-module JsonRpcServer ( RpcResult(..)
+module JsonRpcServer ( RpcResult
                      , RpcError
                      , Param(..)
                      , MethodParams
@@ -15,7 +15,7 @@ module JsonRpcServer ( RpcResult(..)
                      , toJsonFunctions
                      , call
                      , callWithBatchStrategy
-                     , liftR
+                     , liftToResult
                      , rpcError
                      , rpcErrorWithData) where
 
@@ -83,6 +83,7 @@ instance FromJSON Request where
                            x .:? "id"
         where parseParams :: Value -> Parser (Either Object Array)
               parseParams = withObject "params" (return . Left)
+    parseJSON _ = mzero
 
 data Id = IdString Text | IdNumber Number | IdNull
 
@@ -90,12 +91,13 @@ instance FromJSON Id where
     parseJSON (String x) = return $ IdString x
     parseJSON (Number x) = return $ IdNumber x
     parseJSON Null = return IdNull
+    parseJSON _ = mzero
 
 instance ToJSON Id where
-    toJSON id = case id of
-                  IdString x -> toJSON x
-                  IdNumber x -> toJSON x
-                  IdNull -> Null
+    toJSON i = case i of
+                 IdString x -> toJSON x
+                 IdNumber x -> toJSON x
+                 IdNull -> Null
 
 data Response = Response { rspResult :: Either RpcError Value
                          , rspId :: Id }
@@ -123,9 +125,9 @@ call = callWithBatchStrategy sequence
 callWithBatchStrategy :: Monad m => (forall a . [m a] -> m [a]) -> JsonFunctions m -> B.ByteString -> m (Maybe B.ByteString)
 callWithBatchStrategy strategy fs input = response2 response
     where response = runIdentity $ runErrorT $ do
-                       json <- parseJson input
-                       case json of
-                                object@(Object _) -> return $ ((toJSON <$>)`liftM` singleCall fs object)
+                       val <- parseJson input
+                       case val of
+                                obj@(Object _) -> return $ ((toJSON <$>)`liftM` singleCall fs obj)
                                 (Array vector) -> return $ ((toJSON <$>) `liftM` batchCall strategy fs (toList vector))
                                 _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String))
           response2 r = case r of
@@ -137,27 +139,28 @@ callWithBatchStrategy strategy fs input = response2 response
 singleCall :: Monad m => JsonFunctions m -> Value -> m (Maybe Response)
 singleCall (JsonFunctions fs) val = case fromJSON val of
                                       Error msg -> return $ toResponse (Just IdNull) $ Left $ invalidJsonRpc $ Just msg
-                                      Success (Request name (Left params) id) -> (toResponse id `liftM`) $ runErrorT $ do
+                                      Success (Request name (Left params) i) -> (toResponse i `liftM`) $ runErrorT $ do
                                                                                    JsonFunction _ f <- lookupMethod name
                                                                                    f params
     where lookupMethod name = maybe (methodNotFound name) return $ (H.lookup name fs)
           methodNotFound name = throwError $ rpcError (-32601) ("Method not found: " `append` name)
 
+invalidJsonRpc :: Maybe String -> RpcError
 invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
 
 batchCall :: Monad m => (forall a. [m a] -> m [a]) -> JsonFunctions m -> [Value] -> m (Maybe [Response])
 batchCall f gs vals = filterJust `liftM` results
     where results = f $ map (singleCall gs) vals
-          filterJust vals = case catMaybes vals of
-                                 [] -> Nothing
-                                 xs -> Just xs
+          filterJust rs = case catMaybes rs of
+                            [] -> Nothing
+                            xs -> Just xs
 
 toResponse :: Maybe Id -> Either RpcError Value -> Maybe Response
 toResponse Nothing _ = Nothing
-toResponse (Just id) r = Just $ Response r id
+toResponse (Just i) r = Just $ Response r i
 
-liftR :: Monad m => m a -> RpcResult m a
-liftR = lift
+liftToResult :: Monad m => m a -> RpcResult m a
+liftToResult = lift
 
 rpcError :: Int -> Text -> RpcError
 rpcError code msg = RpcError code msg Nothing
