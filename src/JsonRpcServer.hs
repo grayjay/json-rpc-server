@@ -21,17 +21,17 @@ module JsonRpcServer ( RpcResult
 
 import Data.Text hiding (map)
 import Data.Maybe (catMaybes)
-import Data.String
+import Data.String (fromString)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
-import Data.Aeson.Types
+import Data.Aeson.Types (Parser, emptyObject)
 import Data.Vector (toList)
-import Data.Attoparsec.Number
+import Data.Attoparsec.Number (Number)
 import qualified Data.HashMap.Strict as H
-import Control.Applicative
-import Control.Monad
-import Control.Monad.Identity
-import Control.Monad.Error
+import Control.Applicative ((<$>), (<*>))
+import Control.Monad (liftM, mzero)
+import Control.Monad.Identity (runIdentity)
+import Control.Monad.Error (Error, ErrorT, lift, runErrorT, throwError, strMsg, noMsg)
 import Prelude hiding (length)
 
 data RpcError = RpcError Int Text (Maybe Value)
