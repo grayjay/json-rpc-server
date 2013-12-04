@@ -64,13 +64,17 @@ applyFunction :: (FromJSON a, MethodParams m b p) => (a -> b)
               -> (Param a, p)
               -> H.HashMap Text Value
               -> RpcResult m Value
-applyFunction f ((Param name d), ps) args = let arg = maybe d parseArg $ H.lookup name args
-                                                parseArg x = case fromJSON x of
-                                                               Error _ -> Nothing
-                                                               Success val -> Just val
-                                            in case arg of
-                                                 Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
-                                                 Just arg' -> mpApply (f arg') ps args
+applyFunction f ((Param name d), ps) args = do
+        arg <- maybeArg
+        case arg of
+          Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
+          Just arg -> mpApply (f arg) ps args
+    where maybeArg = case H.lookup name args of
+                       Nothing -> return $ d
+                       Just val -> case fromJSON val of
+                                     Error msg -> throwError $ RpcError (-32602) ("Wrong type for argument: " `append` name) Nothing
+                                     Success x -> return $ Just x
+
 
 data Request = Request { rqName :: Text
                        , rqParams :: Either Object Array
