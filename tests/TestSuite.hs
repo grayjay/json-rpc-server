@@ -3,6 +3,7 @@
 import Data.JsonRpc.Common
 import Data.JsonRpc.Server
 import Data.Aeson
+import Data.Aeson.Types
 import qualified Data.ByteString.Lazy.Char8 as B
 import Control.Applicative
 import Control.Monad.Identity
@@ -12,22 +13,29 @@ import Test.Framework.Providers.HUnit
 
 main :: IO ()
 main = defaultMain [ testCase "invalid JSON" testInvalidJson
-                   , testCase "invalid JSON RPC" testInvalidJsonRpc]
-
-emptyJsonFunctions :: Monad m => JsonFunctions m
-emptyJsonFunctions = toJsonFunctions []
+                   , testCase "invalid JSON RPC" testInvalidJsonRpc
+                   , testCase "empty batch call" testInvalidBatchCall]
 
 testInvalidJson :: Assertion
-testInvalidJson = (getErrorCode =<< runIdentity result) @?= Just (-32700)
-    where result = call emptyJsonFunctions "5"
+testInvalidJson = checkErrorCode "5" (-32700)
 
 testInvalidJsonRpc :: Assertion
-testInvalidJsonRpc = (getErrorCode =<< runIdentity result) @?= Just (-32600)
-    where result = call emptyJsonFunctions $ encode $ object ["id" .= (10 :: Int)]
+testInvalidJsonRpc = checkErrorCode (encode $ object ["id" .= (10 :: Int)]) (-32600)
 
+testInvalidBatchCall :: Assertion
+testInvalidBatchCall = checkErrorCode (encode $ emptyArray) (-32600)
+
+checkErrorCode :: B.ByteString -> Int -> Assertion
+checkErrorCode val expectedCode = (getErrorCode =<< runIdentity result) @?= Just expectedCode
+    where result = call emptyJsonFunctions val
+
+fromByteString :: FromJSON a => B.ByteString -> Maybe a
 fromByteString x = case fromJSON <$> decode x of
                      Just (Success x') -> Just x'
                      _ -> Nothing
+
+emptyJsonFunctions :: Monad m => JsonFunctions m
+emptyJsonFunctions = toJsonFunctions []
 
 getErrorCode :: B.ByteString -> Maybe Int
 getErrorCode b = fromByteString b >>= \r ->
