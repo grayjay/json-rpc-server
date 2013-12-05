@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import Data.JsonRpc.Common
+import Data.JsonRpc.Common (RpcError (..), Response (..))
 import Data.JsonRpc.Server
 import Data.Aeson
 import Data.Aeson.Types

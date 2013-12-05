@@ -33,36 +33,6 @@ import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (ErrorT, lift, runErrorT, throwError)
 import Prelude hiding (length)
 
-type RpcResult m a = ErrorT RpcError m a
-
-data Param a = Param Text (Maybe a)
-             deriving Show
-
-class Monad m => MethodParams m a p | a -> m p where
-    mpApply :: a -> p -> H.HashMap Text Value -> RpcResult m Value
-
-instance (ToJSON a, Monad m) => MethodParams m (RpcResult m a) () where
-    mpApply r _ _ = liftM toJSON r
-
-instance (FromJSON a, MethodParams m b p) => MethodParams m (a -> b) (Param a, p) where
-    mpApply = applyFunction
-
-applyFunction :: (FromJSON a, MethodParams m b p) => (a -> b)
-              -> (Param a, p)
-              -> H.HashMap Text Value
-              -> RpcResult m Value
-applyFunction f ((Param name d), ps) args = do
-        maybeArg' <- maybeArg
-        case maybeArg' of
-          Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
-          Just arg -> mpApply (f arg) ps args
-    where maybeArg = case H.lookup name args of
-                       Nothing -> return $ d
-                       Just val -> case fromJSON val of
-                                     Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
-                                     Success x -> return $ Just x
-
-
 data Request = Request { rqName :: Text
                        , rqParams :: Either Object Array
                        , rqId :: Maybe Id }
@@ -80,8 +50,9 @@ data JsonFunction m = JsonFunction Text (H.HashMap Text Value -> RpcResult m Val
 
 newtype JsonFunctions m = JsonFunctions (H.HashMap Text (JsonFunction m))
 
-toJsonFunction :: MethodParams m a p => Text -> a -> p -> JsonFunction m
-toJsonFunction name f params = JsonFunction name $ mpApply f params
+toJsonFunction :: (MethodParams m a p b, ToJSON b, Monad m) => Text -> a -> p -> JsonFunction m
+toJsonFunction name f params = JsonFunction name g
+    where g x = toJSON `liftM` mpApply f params x
 
 toJsonFunctions :: [JsonFunction m] -> JsonFunctions m
 toJsonFunctions fs = JsonFunctions $ H.fromList $ map (\f@(JsonFunction n _) -> (n, f)) fs
@@ -98,14 +69,14 @@ callWithBatchStrategy strategy fs input = response2 response
                                 (Array vector) -> return $ ((toJSON <$>) `liftM` batchCall strategy fs (toList vector))
                                 _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String))
           response2 r = case r of
-                          Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err)
+                          Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) ((Left err) :: Either RpcError ())
                           Right maybeVal -> (encode <$>) `liftM` maybeVal
           parseJson = maybe invalidJson return . decode
           invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
 
 singleCall :: Monad m => JsonFunctions m -> Value -> m (Maybe Response)
 singleCall (JsonFunctions fs) val = case fromJSON val of
-                                      Error msg -> return $ toResponse (Just IdNull) $ Left $ invalidJsonRpc $ Just msg
+                                      Error msg -> return $ toResponse (Just IdNull) $ ((Left $ invalidJsonRpc $ Just msg) :: Either RpcError ())
                                       Success (Request name (Left params) i) -> (toResponse i `liftM`) $ runErrorT $ do
                                                                                    JsonFunction _ f <- lookupMethod name
                                                                                    f params
@@ -122,15 +93,12 @@ batchCall f gs vals = filterJust `liftM` results
                             [] -> Nothing
                             xs -> Just xs
 
-toResponse :: Maybe Id -> Either RpcError Value -> Maybe Response
+toResponse :: ToJSON a => Maybe Id -> Either RpcError a -> Maybe Response
 toResponse Nothing _ = Nothing
-toResponse (Just i) r = Just $ Response i r
+toResponse (Just i) r = Just $ Response i (either Left (Right . toJSON) r)
 
 liftToResult :: Monad m => m a -> RpcResult m a
 liftToResult = lift
 
 rpcError :: Int -> Text -> RpcError
 rpcError code msg = RpcError code msg Nothing
-
-rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
-rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData

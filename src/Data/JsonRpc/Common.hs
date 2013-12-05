@@ -1,15 +1,51 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses
+, FunctionalDependencies
+, FlexibleInstances
+, UndecidableInstances
+, Rank2Types
+, OverloadedStrings #-}
 
-module Data.JsonRpc.Common( RpcError (..)
-                          , Response (..)
-                          , Id (..)) where
+module Data.JsonRpc.Common where
 
 import Data.Aeson
+import qualified Data.HashMap.Strict as H
 import Data.String (fromString)
-import Data.Text (Text)
+import Data.Text (Text, append)
 import Data.Attoparsec.Number (Number)
 import Control.Applicative ((<$>), (<*>), (<|>), empty)
-import Control.Monad.Error (Error, strMsg, noMsg)
+import Control.Monad (liftM, mzero)
+import Control.Monad.Error (Error, strMsg, noMsg, ErrorT, lift, runErrorT, throwError)
+
+data Method m a p b = Method a p
+
+data Param a = Param Text (Maybe a)
+
+type RpcResult m a = ErrorT RpcError m a
+
+class Monad m => MethodParams m a p b | a -> m p b where
+    mpApply :: a -> p -> H.HashMap Text Value -> RpcResult m b
+
+instance (ToJSON a, Monad m) => MethodParams m (RpcResult m a) () a where
+    mpApply r _ _ = r
+
+instance (FromJSON a, ToJSON c,  MethodParams m b p c) => MethodParams m (a -> b) (Param a, p) c where
+    mpApply = applyFunction
+
+applyFunction :: (FromJSON a, MethodParams m b p c)
+              => (a -> b)
+              -> (Param a, p)
+              -> H.HashMap Text Value
+              -> RpcResult m c
+applyFunction f ((Param name d), ps) args = do
+        maybeArg' <- maybeArg
+        case maybeArg' of
+          Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
+          Just arg -> mpApply (f arg) ps args
+    where maybeArg = case H.lookup name args of
+                       Nothing -> return $ d
+                       Just val -> case fromJSON val of
+                                     Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
+                                     Success x -> return $ Just x
 
 data Response = Response { rspId :: Id
                          , rspResult :: Either RpcError Value }
@@ -70,3 +106,6 @@ instance ToJSON Id where
                  IdString x -> toJSON x
                  IdNumber x -> toJSON x
                  IdNull -> Null
+
+rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
+rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData
