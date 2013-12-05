@@ -7,7 +7,9 @@ import Data.String (fromString)
 import Data.Text (Text)
 import Control.Monad.Error (Error, strMsg, noMsg)
 
-data RpcError = RpcError Int Text (Maybe Value)
+data RpcError = RpcError { errCode :: Int
+                         , errMsg :: Text
+                         , errData :: (Maybe Value)}
               deriving Show
 
 instance Error RpcError where
