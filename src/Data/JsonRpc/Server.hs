@@ -5,19 +5,19 @@
 , Rank2Types
 , OverloadedStrings #-}
 
-module JsonRpcServer ( RpcResult
-                     , RpcError
-                     , Param(..)
-                     , MethodParams
-                     , JsonFunction
-                     , toJsonFunction
-                     , JsonFunctions
-                     , toJsonFunctions
-                     , call
-                     , callWithBatchStrategy
-                     , liftToResult
-                     , rpcError
-                     , rpcErrorWithData) where
+module Data.JsonRpc.Server ( RpcResult
+                           , RpcError
+                           , Param(..)
+                           , MethodParams
+                           , JsonFunction
+                           , toJsonFunction
+                           , JsonFunctions
+                           , toJsonFunctions
+                           , call
+                           , callWithBatchStrategy
+                           , liftToResult
+                           , rpcError
+                           , rpcErrorWithData) where
 
 import Data.Text hiding (map)
 import Data.Maybe (catMaybes)

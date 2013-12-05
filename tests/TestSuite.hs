@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import JsonRpcServer
+import Data.JsonRpc.Server
 import Data.List
 import qualified Data.ByteString.Lazy.Char8 as B
 import Control.Monad
