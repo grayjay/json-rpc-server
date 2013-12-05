@@ -19,9 +19,9 @@ module Data.JsonRpc.Server ( RpcResult
                            , rpcError
                            , rpcErrorWithData) where
 
+import Data.JsonRpc.Common
 import Data.Text hiding (map)
 import Data.Maybe (catMaybes)
-import Data.String (fromString)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
 import Data.Aeson.Types (Parser, emptyObject)
@@ -31,20 +31,8 @@ import qualified Data.HashMap.Strict as H
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (liftM, mzero)
 import Control.Monad.Identity (runIdentity)
-import Control.Monad.Error (Error, ErrorT, lift, runErrorT, throwError, strMsg, noMsg)
+import Control.Monad.Error (ErrorT, lift, runErrorT, throwError)
 import Prelude hiding (length)
-
-data RpcError = RpcError Int Text (Maybe Value)
-              deriving Show
-
-instance Error RpcError where
-    noMsg = strMsg "unknown error"
-    strMsg msg = RpcError (-32000) (fromString msg) Nothing
-
-instance ToJSON RpcError where
-    toJSON (RpcError code msg data') = object pairs
-        where pairs = ["code" .= toJSON code, "message" .= toJSON msg] ++ dataPair
-              dataPair = maybe [] (\d -> ["data" .= toJSON d]) data'
 
 type RpcResult m a = ErrorT RpcError m a
 
@@ -65,14 +53,14 @@ applyFunction :: (FromJSON a, MethodParams m b p) => (a -> b)
               -> H.HashMap Text Value
               -> RpcResult m Value
 applyFunction f ((Param name d), ps) args = do
-        arg <- maybeArg
-        case arg of
+        maybeArg' <- maybeArg
+        case maybeArg' of
           Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
           Just arg -> mpApply (f arg) ps args
     where maybeArg = case H.lookup name args of
                        Nothing -> return $ d
                        Just val -> case fromJSON val of
-                                     Error msg -> throwError $ RpcError (-32602) ("Wrong type for argument: " `append` name) Nothing
+                                     Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
                                      Success x -> return $ Just x
 
 
