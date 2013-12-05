@@ -26,7 +26,6 @@ import qualified Data.ByteString.Lazy as B
 import Data.Aeson
 import Data.Aeson.Types (Parser, emptyObject)
 import Data.Vector (toList)
-import Data.Attoparsec.Number (Number)
 import qualified Data.HashMap.Strict as H
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (liftM, mzero)
@@ -77,30 +76,6 @@ instance FromJSON Request where
               parseParams = withObject "params" (return . Left)
     parseJSON _ = mzero
 
-data Id = IdString Text | IdNumber Number | IdNull
-
-instance FromJSON Id where
-    parseJSON (String x) = return $ IdString x
-    parseJSON (Number x) = return $ IdNumber x
-    parseJSON Null = return IdNull
-    parseJSON _ = mzero
-
-instance ToJSON Id where
-    toJSON i = case i of
-                 IdString x -> toJSON x
-                 IdNumber x -> toJSON x
-                 IdNull -> Null
-
-data Response = Response { rspResult :: Either RpcError Value
-                         , rspId :: Id }
-
-instance ToJSON Response where
-    toJSON r = object ["jsonrpc" .= jsonRpcVersion, result, "id" .= (toJSON $ rspId r)]
-        where result = either (("error" .=) . toJSON) ("result" .=) (rspResult r)
-
-jsonRpcVersion :: Text
-jsonRpcVersion = "2.0"
-
 data JsonFunction m = JsonFunction Text (H.HashMap Text Value -> RpcResult m Value)
 
 newtype JsonFunctions m = JsonFunctions (H.HashMap Text (JsonFunction m))
@@ -149,7 +124,7 @@ batchCall f gs vals = filterJust `liftM` results
 
 toResponse :: Maybe Id -> Either RpcError Value -> Maybe Response
 toResponse Nothing _ = Nothing
-toResponse (Just i) r = Just $ Response r i
+toResponse (Just i) r = Just $ Response i r
 
 liftToResult :: Monad m => m a -> RpcResult m a
 liftToResult = lift
