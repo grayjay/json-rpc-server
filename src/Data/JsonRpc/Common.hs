@@ -107,5 +107,8 @@ instance ToJSON Id where
                  IdNumber x -> toJSON x
                  IdNull -> Null
 
+rpcError :: Int -> Text -> RpcError
+rpcError code msg = RpcError code msg Nothing
+
 rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
 rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData

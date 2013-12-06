@@ -99,6 +99,3 @@ toResponse (Just i) r = Just $ Response i (either Left (Right . toJSON) r)
 
 liftToResult :: Monad m => m a -> RpcResult m a
 liftToResult = lift
-
-rpcError :: Int -> Text -> RpcError
-rpcError code msg = RpcError code msg Nothing
