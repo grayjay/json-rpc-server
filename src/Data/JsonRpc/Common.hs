@@ -36,13 +36,16 @@ class (Function f m r, MethodParams f p m r, ToJSON r, FromJSON r) => ToClientFu
     toClientFunction :: (B.ByteString -> m B.ByteString) -> Text -> p -> (H.HashMap Text Value) -> f
 
 instance (Monad m, ToJSON r, FromJSON r) => ToClientFunction (RpcResult m r) () m r where
-    toClientFunction server mName _ hm = decode2 (server (encode' hm))
+    toClientFunction server _ _ hm = decode2 (server (encode' hm))
 
 instance (ToClientFunction f p m r, ToJSON a, FromJSON a) => ToClientFunction (a -> f) (Param a, p) m r where
     toClientFunction server mName (Param name _, ps) hm arg = toClientFunction server mName ps (H.insert name (toJSON arg) hm)
 
+toClientFunction' :: ToClientFunction f p m r => (B.ByteString -> m B.ByteString) -> Method f2 p m2 r -> f
+toClientFunction' server (Method mName _ ps) = toClientFunction server mName ps H.empty
+
 encode' :: H.HashMap Text Value -> B.ByteString
-encode' = undefined
+encode' hm = undefined
 
 decode2 :: (Monad m, FromJSON r) => m B.ByteString -> RpcResult m r
 decode2 = undefined
