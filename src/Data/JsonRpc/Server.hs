@@ -24,27 +24,13 @@ import Data.Text hiding (map)
 import Data.Maybe (catMaybes)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
-import Data.Aeson.Types (Parser, emptyObject)
 import Data.Vector (toList)
 import qualified Data.HashMap.Strict as H
-import Control.Applicative ((<$>), (<*>))
-import Control.Monad (liftM, mzero)
+import Control.Applicative ((<$>))
+import Control.Monad (liftM)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (ErrorT, lift, runErrorT, throwError)
 import Prelude hiding (length)
-
-data Request = Request { rqName :: Text
-                       , rqParams :: Either Object Array
-                       , rqId :: Maybe Id }
-
-instance FromJSON Request where
-    parseJSON (Object x) = Request <$>
-                           x .: "method" <*>
-                           (parseParams =<< x .:? "params" .!= emptyObject) <*>
-                           x .:? "id"
-        where parseParams :: Value -> Parser (Either Object Array)
-              parseParams = withObject "params" (return . Left)
-    parseJSON _ = mzero
 
 data JsonFunction m = JsonFunction Text (H.HashMap Text Value -> RpcResult m Value)
 

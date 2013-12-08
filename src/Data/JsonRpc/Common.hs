@@ -9,13 +9,15 @@
 module Data.JsonRpc.Common where
 
 import Data.Aeson
+import Data.Aeson.Types
 import qualified Data.ByteString.Lazy as B
 import qualified Data.HashMap.Strict as H
 import Data.String (fromString)
-import Data.Text (Text, append)
+import Data.Text (Text, append, unpack)
 import Data.Attoparsec.Number (Number)
 import Control.Applicative ((<$>), (<*>), (<|>), empty)
-import Control.Monad.Error (Error, MonadError, strMsg, noMsg, ErrorT, throwError)
+import Control.Monad (mzero)
+import Control.Monad.Error (ErrorT (..), Error, MonadError, strMsg, noMsg, ErrorT, throwError)
 
 data Method f p (m :: * -> *) r = Method Text f p
 
@@ -36,7 +38,7 @@ class (Function f m r, MethodParams f p m r, ToJSON r, FromJSON r) => ToClientFu
     toClientFunction :: (B.ByteString -> m B.ByteString) -> Text -> p -> (H.HashMap Text Value) -> f
 
 instance (Monad m, ToJSON r, FromJSON r) => ToClientFunction (RpcResult m r) () m r where
-    toClientFunction server _ _ hm = decode2 (server (encode' hm))
+    toClientFunction server mName _ hm = decode2 (server (encode' mName hm))
 
 instance (ToClientFunction f p m r, ToJSON a, FromJSON a) => ToClientFunction (a -> f) (Param a, p) m r where
     toClientFunction server mName (Param name _, ps) hm arg = toClientFunction server mName ps (H.insert name (toJSON arg) hm)
@@ -44,11 +46,18 @@ instance (ToClientFunction f p m r, ToJSON a, FromJSON a) => ToClientFunction (a
 toClientFunction' :: ToClientFunction f p m r => (B.ByteString -> m B.ByteString) -> Method f2 p m2 r -> f
 toClientFunction' server (Method mName _ ps) = toClientFunction server mName ps H.empty
 
-encode' :: H.HashMap Text Value -> B.ByteString
-encode' hm = undefined
+encode' :: Text -> H.HashMap Text Value -> B.ByteString
+encode' mName hm = encode $ toJSON $ Request mName (Left hm) (Just $ IdNumber 100)
 
 decode2 :: (Monad m, FromJSON r) => m B.ByteString -> RpcResult m r
-decode2 = undefined
+decode2 x = ErrorT $ do
+  str <- x
+  let Just json = decode str
+      Success (Response _ (Right response)) = fromJSON json
+      parsed = fromJSON response
+  case parsed of
+    Error msg -> fail $ "message: " ++ msg
+    Success val -> return $ Right val
 
 class (Monad m, Function f m r) => MethodParams f p m r | f -> p m r where
     mpApply :: f -> p -> H.HashMap Text Value -> RpcResult m r
@@ -121,6 +130,15 @@ msgKey = "message"
 dataKey :: Text
 dataKey = "data"
 
+methodKey :: Text
+methodKey = "method"
+
+paramsKey :: Text
+paramsKey = "params"
+
+idKey :: Text
+idKey = "id"
+
 data Id = IdString Text | IdNumber Number | IdNull
 
 instance FromJSON Id where
@@ -134,6 +152,25 @@ instance ToJSON Id where
                  IdString x -> toJSON x
                  IdNumber x -> toJSON x
                  IdNull -> Null
+
+data Request = Request { rqName :: Text
+                       , rqParams :: Either Object Array
+                       , rqId :: Maybe Id }
+
+instance FromJSON Request where
+    parseJSON (Object x) = Request <$>
+                           x .: methodKey <*>
+                           (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
+                           x .:? idKey
+        where parseParams :: Value -> Parser (Either Object Array)
+              parseParams = withObject (unpack paramsKey) (return . Left)
+    parseJSON _ = mzero
+
+instance ToJSON Request where
+    toJSON (Request name (Left params) i) = object pairs
+        where pairs = [ methodKey .= toJSON name
+                      , paramsKey .= toJSON params
+                      , idKey .= toJSON i ]
 
 rpcError :: Int -> Text -> RpcError
 rpcError code msg = RpcError code msg Nothing
