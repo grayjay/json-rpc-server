@@ -3,13 +3,30 @@
 
 name:                json-rpc-server
 version:             0.1.0.0
+license:             MIT
+license-file:        LICENSE
 author:              grayjay
 build-type:          Simple
+extra-source-files:  README.md
 cabal-version:       >=1.8
 
 library
   exposed-modules:     Data.JsonRpc.Client, Data.JsonRpc.Server, Data.JsonRpc.Common
-  build-depends:       base, aeson, mtl, text, vector, attoparsec, unordered-containers, bytestring
+  other-extensions:    OverloadedStrings,
+                       MultiParamTypeClasses,
+                       FunctionalDependencies,
+                       FlexibleInstances,
+                       UndecidableInstances,
+                       Rank2Types,
+                       KindSignatures
+  build-depends:       base >=4.6 && <4.7,
+                       aeson >=0.6 && <0.7,
+                       bytestring >=0.10 && <0.11,
+                       mtl >=2.1 && <2.2,
+                       text >=0.11 && <0.12,
+                       vector >=0.10 && <0.11,
+                       unordered-containers >=0.2 && <0.3,
+                       attoparsec >=0.10 && <0.11
   hs-source-dirs:      src
   ghc-options:         -Wall
 
@@ -17,5 +34,12 @@ test-suite tests
   hs-source-dirs:      tests
   main-is:             TestSuite.hs
   type:                exitcode-stdio-1.0
-  build-depends:       base, json-rpc-server, HUnit, test-framework, test-framework-hunit, aeson, mtl, bytestring
+  build-depends:       base >=4.6 && <4.7,
+                       json-rpc-server,
+                       HUnit >=1.2 && <1.3,
+                       test-framework >=0.8 && <0.9,
+                       test-framework-hunit >=0.3 && <0.4,
+                       aeson >=0.6 && <0.7,
+                       bytestring >=0.10 && <0.11,
+                       mtl >=2.1 && <2.2
   ghc-options:         -Wall
