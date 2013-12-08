@@ -16,26 +16,26 @@ import Control.Applicative ((<$>), (<*>), (<|>), empty)
 import Control.Monad (liftM, mzero)
 import Control.Monad.Error (Error, strMsg, noMsg, ErrorT, lift, runErrorT, throwError)
 
-data Method m a p b = Method a p
+data Method f p m r = Method f p
 
 data Param a = Param Text (Maybe a)
 
-type RpcResult m a = ErrorT RpcError m a
+type RpcResult m r = ErrorT RpcError m r
 
-class Monad m => MethodParams m a p b | a -> m p b where
-    mpApply :: a -> p -> H.HashMap Text Value -> RpcResult m b
+class Monad m => MethodParams f p m r | f -> p m r where
+    mpApply :: f -> p -> H.HashMap Text Value -> RpcResult m r
 
-instance (ToJSON a, Monad m) => MethodParams m (RpcResult m a) () a where
+instance (ToJSON r, Monad m) => MethodParams (RpcResult m r) () m r where
     mpApply r _ _ = r
 
-instance (FromJSON a, ToJSON c,  MethodParams m b p c) => MethodParams m (a -> b) (Param a, p) c where
+instance (FromJSON a, ToJSON r, MethodParams f p m r) => MethodParams (a -> f) (Param a, p)m r where
     mpApply = applyFunction
 
-applyFunction :: (FromJSON a, MethodParams m b p c)
-              => (a -> b)
+applyFunction :: (FromJSON a, MethodParams f p m r)
+              => (a -> f)
               -> (Param a, p)
               -> H.HashMap Text Value
-              -> RpcResult m c
+              -> RpcResult m r
 applyFunction f ((Param name d), ps) args = do
         maybeArg' <- maybeArg
         case maybeArg' of

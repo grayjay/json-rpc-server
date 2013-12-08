@@ -50,7 +50,7 @@ data JsonFunction m = JsonFunction Text (H.HashMap Text Value -> RpcResult m Val
 
 newtype JsonFunctions m = JsonFunctions (H.HashMap Text (JsonFunction m))
 
-toJsonFunction :: (MethodParams m a p b, ToJSON b, Monad m) => Text -> a -> p -> JsonFunction m
+toJsonFunction :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> JsonFunction m
 toJsonFunction name f params = JsonFunction name g
     where g x = toJSON `liftM` mpApply f params x
 
