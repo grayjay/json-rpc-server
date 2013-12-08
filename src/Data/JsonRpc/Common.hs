@@ -3,26 +3,51 @@
 , FlexibleInstances
 , UndecidableInstances
 , Rank2Types
+, KindSignatures
 , OverloadedStrings #-}
 
 module Data.JsonRpc.Common where
 
 import Data.Aeson
+import qualified Data.ByteString.Lazy as B
 import qualified Data.HashMap.Strict as H
 import Data.String (fromString)
 import Data.Text (Text, append)
 import Data.Attoparsec.Number (Number)
 import Control.Applicative ((<$>), (<*>), (<|>), empty)
-import Control.Monad (liftM, mzero)
-import Control.Monad.Error (Error, strMsg, noMsg, ErrorT, lift, runErrorT, throwError)
+import Control.Monad.Error (Error, MonadError, strMsg, noMsg, ErrorT, throwError)
 
-data Method f p m r = Method f p
+data Method f p (m :: * -> *) r = Method Text f p
+
+method :: MethodParams f p m r => Text -> f -> p -> Method f p m r
+method = Method
 
 data Param a = Param Text (Maybe a)
 
 type RpcResult m r = ErrorT RpcError m r
 
-class Monad m => MethodParams f p m r | f -> p m r where
+class Monad m => Function f m r | f -> m r where
+
+instance Monad m => Function (RpcResult m r) m r where
+
+instance (Monad m, Function f m r) => Function (a -> f) m r where
+
+class (Function f m r, MethodParams f p m r, ToJSON r, FromJSON r) => ToClientFunction f p m r | f -> p m r, p m r -> f where
+    toClientFunction :: (B.ByteString -> m B.ByteString) -> Text -> p -> (H.HashMap Text Value) -> f
+
+instance (Monad m, ToJSON r, FromJSON r) => ToClientFunction (RpcResult m r) () m r where
+    toClientFunction server mName _ hm = decode2 (server (encode' hm))
+
+instance (ToClientFunction f p m r, ToJSON a, FromJSON a) => ToClientFunction (a -> f) (Param a, p) m r where
+    toClientFunction server mName (Param name _, ps) hm arg = toClientFunction server mName ps (H.insert name (toJSON arg) hm)
+
+encode' :: H.HashMap Text Value -> B.ByteString
+encode' = undefined
+
+decode2 :: (Monad m, FromJSON r) => m B.ByteString -> RpcResult m r
+decode2 = undefined
+
+class (Monad m, Function f m r) => MethodParams f p m r | f -> p m r where
     mpApply :: f -> p -> H.HashMap Text Value -> RpcResult m r
 
 instance (ToJSON r, Monad m) => MethodParams (RpcResult m r) () m r where
