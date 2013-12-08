@@ -6,7 +6,19 @@
 , KindSignatures
 , OverloadedStrings #-}
 
-module Data.JsonRpc.Common where
+module Data.JsonRpc.Common( Method
+                          , method
+                          , Param (..)
+                          , RpcResult
+                          , MethodParams
+                          , mpApply
+                          , Id (..)
+                          , Request (..)
+                          , Response (..)
+                          , toClientFunction'
+                          , RpcError (..)
+                          , rpcError
+                          , rpcErrorWithData) where
 
 import Data.Aeson
 import Data.Aeson.Types
