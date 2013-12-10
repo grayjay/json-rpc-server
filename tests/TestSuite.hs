@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import Data.JsonRpc.Common (RpcError (..), Response (..))
+module Main (main) where
+
 import Data.JsonRpc.Server
+import TestTypes
 import Data.Aeson
 import Data.Aeson.Types
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -40,5 +42,5 @@ emptyJsonFunctions = toJsonFunctions []
 getErrorCode :: B.ByteString -> Maybe Int
 getErrorCode b = fromByteString b >>= \r ->
                  case r of
-                   Just (Response _ (Left (RpcError code _ _))) -> Just code
+                   Just (TestResponse _ (Left (TestRpcError code _ _))) -> Just code
                    _ -> Nothing
