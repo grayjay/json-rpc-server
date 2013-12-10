@@ -24,12 +24,12 @@ import Data.Text (Text, append, unpack)
 import Data.Maybe (catMaybes)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
-import Data.Aeson.Types
+import Data.Aeson.Types (Parser, emptyObject)
 import Data.Vector (toList)
 import qualified Data.HashMap.Strict as H
 import Data.Attoparsec.Number (Number)
 import Control.Applicative ((<$>), (<*>), empty)
-import Control.Monad (liftM, mzero)
+import Control.Monad (liftM)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (Error, ErrorT, lift, runErrorT, throwError, strMsg, noMsg)
 import Prelude hiding (length)
@@ -63,9 +63,7 @@ applyFunction f ((Param name d), ps) args = do
                                      Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
                                      Success x -> return $ Just x
 
-data RpcError = RpcError { errCode :: Int
-                         , errMsg :: Text
-                         , errData :: (Maybe Value)}
+data RpcError = RpcError Int Text (Maybe Value)
               deriving Show
 
 instance Error RpcError where
@@ -101,9 +99,7 @@ instance ToJSON Id where
                  IdNumber x -> toJSON x
                  IdNull -> Null
 
-data Request = Request { rqName :: Text
-                       , rqParams :: Either Object Array
-                       , rqId :: Maybe Id }
+data Request = Request Text (Either Object Array) (Maybe Id)
 
 instance FromJSON Request where
     parseJSON (Object x) = Request <$>
@@ -112,13 +108,7 @@ instance FromJSON Request where
                            x .:? idKey
         where parseParams :: Value -> Parser (Either Object Array)
               parseParams = withObject (unpack paramsKey) (return . Left)
-    parseJSON _ = mzero
-
-instance ToJSON Request where
-    toJSON (Request name (Left params) i) = object pairs
-        where pairs = [ methodKey .= toJSON name
-                      , paramsKey .= toJSON params
-                      , idKey .= toJSON i ]
+    parseJSON _ = empty
 
 rpcError :: Int -> Text -> RpcError
 rpcError code msg = RpcError code msg Nothing
