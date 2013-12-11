@@ -1,7 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module TestTypes ( TestResponse (..)
-                 , TestRpcError (..)) where
+module TestTypes ( TestRequest (..)
+                 , TestResponse (..)
+                 , TestRpcError (..)
+                 , TestId (..)
+                 , jsonRpcVersion) where
 
 import Data.Aeson
 import Data.Aeson.Types
@@ -25,6 +28,14 @@ instance FromJSON TestRpcError where
                                                         Nothing -> 2
                                                         Just _ -> 3)
     parseJSON _ = empty
+
+data TestRequest = TestRequest Text (Either Object Array) (Maybe TestId)
+
+instance ToJSON TestRequest where
+    toJSON (TestRequest name (Left params) i) = object pairs
+        where pairs = [ "method" .= toJSON name
+                      , "params" .= toJSON params
+                      , "id" .= toJSON i ]
 
 data TestResponse = TestResponse { rspId :: TestId
                                  , rspResult :: Either TestRpcError Value }
