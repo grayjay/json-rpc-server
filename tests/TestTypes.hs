@@ -9,6 +9,7 @@ import Data.Text (Text)
 import Data.Attoparsec.Number (Number)
 import Data.HashMap.Strict (size)
 import Control.Applicative
+import Control.Monad
 
 data TestRpcError = TestRpcError { errCode :: Int
                                  , errMsg :: Text
@@ -16,10 +17,14 @@ data TestRpcError = TestRpcError { errCode :: Int
                     deriving Show
 
 instance FromJSON TestRpcError where
-    parseJSON (Object err) = TestRpcError <$>
+    parseJSON (Object err) = (TestRpcError <$>
                              err .: codeKey <*>
                              err .: msgKey <*>
-                             err .:? dataKey
+                             err .:? dataKey) >>= checkKeys
+        where checkKeys e = let checkSize s = failIf $ size err /= s
+                            in pure e <* (checkSize $ case errData e of
+                                                        Nothing -> 2
+                                                        Just _ -> 3)
     parseJSON _ = empty
 
 data TestResponse = TestResponse { rspId :: TestId
