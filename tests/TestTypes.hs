@@ -16,7 +16,7 @@ import Control.Applicative
 data TestRpcError = TestRpcError { errCode :: Int
                                  , errMsg :: Text
                                  , errData :: (Maybe Value)}
-                    deriving Show
+                    deriving (Eq, Show)
 
 instance FromJSON TestRpcError where
     parseJSON (Object err) = (TestRpcError <$>
@@ -29,16 +29,21 @@ instance FromJSON TestRpcError where
                                                         Just _ -> 3)
     parseJSON _ = empty
 
-data TestRequest = TestRequest Text (Either Object Array) (Maybe TestId)
+data TestRequest = TestRequest Text (Maybe (Either Object Array)) (Maybe TestId)
 
 instance ToJSON TestRequest where
-    toJSON (TestRequest name (Left params) i) = object pairs
+    toJSON (TestRequest name params i) = object pairs
         where pairs = [ "method" .= toJSON name
-                      , "params" .= toJSON params
-                      , "id" .= toJSON i ]
+                      , "id" .= toJSON i ] ++ ps
+              ps = case params of
+                         Nothing -> []
+                         Just (Left named) -> paramsPair named
+                         Just (Right unnamed) -> paramsPair unnamed
+                  where paramsPair v = ["params" .= toJSON v]
 
 data TestResponse = TestResponse { rspId :: TestId
                                  , rspResult :: Either TestRpcError Value }
+                    deriving (Eq, Show)
 
 instance FromJSON TestResponse where
     parseJSON (Object r) = failIf (size r /= 3) *> checkVersion *>
@@ -52,6 +57,7 @@ failIf :: Bool -> Parser ()
 failIf b = if b then empty else pure ()
 
 data TestId = IdString Text | IdNumber Number | IdNull
+              deriving (Eq, Show)
 
 instance FromJSON TestId where
     parseJSON (String x) = return $ IdString x
