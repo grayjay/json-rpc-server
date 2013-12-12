@@ -10,6 +10,7 @@
 module Data.JsonRpc.Server ( RpcResult
                            , RpcError
                            , Param(..)
+                           , (:+:) (..)
                            , MethodParams
                            , JsonFunction
                            , toJsonFunction
@@ -43,6 +44,9 @@ data Param a = Param { -- | Parameter name.
                        --   'Nothing' means that the parameter is required.
                      , paramDefault :: Maybe a }
 
+data a :+: b = a :+: b
+infixr 5 :+:
+
 -- | Return type of a method. A method call can either fail with an 'RpcError'
 --   or succeed with a result of type 'r'.
 type RpcResult m r = ErrorT RpcError m r
@@ -54,15 +58,15 @@ class Monad m => MethodParams f p m r | f -> p m r where
 instance (ToJSON r, Monad m) => MethodParams (RpcResult m r) () m r where
     mpApply r _ _ = r
 
-instance (FromJSON a, ToJSON r, MethodParams f p m r) => MethodParams (a -> f) (Param a, p)m r where
+instance (FromJSON a, ToJSON r, MethodParams f p m r) => MethodParams (a -> f) (Param a :+: p) m r where
     mpApply = applyFunction
 
 applyFunction :: (FromJSON a, MethodParams f p m r)
               => (a -> f)
-              -> (Param a, p)
+              -> Param a :+: p
               -> H.HashMap Text Value
               -> RpcResult m r
-applyFunction f (Param name d, ps) args = do
+applyFunction f (Param name d :+: ps) args = do
         maybeArg' <- maybeArg
         case maybeArg' of
           Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
