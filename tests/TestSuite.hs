@@ -75,10 +75,10 @@ testNoArgs :: Assertion
 testNoArgs = compareGetTimeResult Nothing
 
 testEmptyUnnamedArgs :: Assertion
-testEmptyUnnamedArgs = compareGetTimeResult $ Just $ Right $ empty
+testEmptyUnnamedArgs = compareGetTimeResult $ Just $ Right empty
 
 testEmptyNamedArgs :: Assertion
-testEmptyNamedArgs = compareGetTimeResult $ Just $ Left $ H.empty
+testEmptyNamedArgs = compareGetTimeResult $ Just $ Left H.empty
 
 compareGetTimeResult :: Maybe (Either Object Array) -> Assertion
 compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expected =<<

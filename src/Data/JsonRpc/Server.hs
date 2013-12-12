@@ -1,9 +1,9 @@
-{-# LANGUAGE MultiParamTypeClasses
-, FunctionalDependencies
-, FlexibleInstances
-, UndecidableInstances
-, Rank2Types
-, OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses,
+             FunctionalDependencies,
+             FlexibleInstances,
+             UndecidableInstances,
+             Rank2Types,
+             OverloadedStrings #-}
 
 module Data.JsonRpc.Server ( RpcResult
                            , RpcError
@@ -52,13 +52,13 @@ applyFunction :: (FromJSON a, MethodParams f p m r)
               -> (Param a, p)
               -> H.HashMap Text Value
               -> RpcResult m r
-applyFunction f ((Param name d), ps) args = do
+applyFunction f (Param name d, ps) args = do
         maybeArg' <- maybeArg
         case maybeArg' of
           Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
           Just arg -> mpApply (f arg) ps args
     where maybeArg = case H.lookup name args of
-                       Nothing -> return $ d
+                       Nothing -> return d
                        Just val -> case fromJSON val of
                                      Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
                                      Success x -> return $ Just x
@@ -79,7 +79,7 @@ data Response = Response { rspId :: Id
                          , rspResult :: Either RpcError Value }
 
 instance ToJSON Response where
-    toJSON r = object ["jsonrpc" .= jsonRpcVersion, result, "id" .= (toJSON $ rspId r)]
+    toJSON r = object ["jsonrpc" .= jsonRpcVersion, result, "id" .= toJSON (rspId r)]
         where result = either (("error" .=) . toJSON) ("result" .=) (rspResult r)
 
 jsonRpcVersion :: Text
@@ -153,22 +153,22 @@ callWithBatchStrategy strategy fs input = response2 response
     where response = runIdentity $ runErrorT $ do
                        val <- parseJson input
                        case val of
-                                obj@(Object _) -> return $ ((toJSON <$>) `liftM` singleCall fs obj)
-                                (Array vector) -> return $ ((toJSON <$>) `liftM` batchCall strategy fs (toList vector))
+                                obj@(Object _) -> return ((toJSON <$>) `liftM` singleCall fs obj)
+                                (Array vector) -> return ((toJSON <$>) `liftM` batchCall strategy fs (toList vector))
                                 _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String))
           response2 r = case r of
-                          Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) ((Left err) :: Either RpcError ())
+                          Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err :: Either RpcError ())
                           Right maybeVal -> (encode <$>) `liftM` maybeVal
           parseJson = maybe invalidJson return . decode
           invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
 
 singleCall :: Monad m => JsonFunctions m -> Value -> m (Maybe Response)
 singleCall (JsonFunctions fs) val = case fromJSON val of
-                                      Error msg -> return $ toResponse (Just IdNull) $ ((Left $ invalidJsonRpc $ Just msg) :: Either RpcError ())
+                                      Error msg -> return $ toResponse (Just IdNull) ((Left $ invalidJsonRpc $ Just msg) :: Either RpcError ())
                                       Success (Request name (Left params) i) -> (toResponse i `liftM`) $ runErrorT $ do
                                                                                    JsonFunction _ f <- lookupMethod name
                                                                                    f params
-    where lookupMethod name = maybe (methodNotFound name) return $ (H.lookup name fs)
+    where lookupMethod name = maybe (methodNotFound name) return $ H.lookup name fs
           methodNotFound name = throwError $ rpcError (-32601) ("Method not found: " `append` name)
 
 invalidJsonRpc :: Maybe String -> RpcError

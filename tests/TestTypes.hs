@@ -15,7 +15,7 @@ import Control.Applicative
 
 data TestRpcError = TestRpcError { errCode :: Int
                                  , errMsg :: Text
-                                 , errData :: (Maybe Value)}
+                                 , errData :: Maybe Value}
                     deriving (Eq, Show)
 
 instance FromJSON TestRpcError where
@@ -24,7 +24,7 @@ instance FromJSON TestRpcError where
                              err .: "message" <*>
                              err .:? "data") >>= checkKeys
         where checkKeys e = let checkSize s = failIf $ size err /= s
-                            in pure e <* (checkSize $ case errData e of
+                            in pure e <* checkSize (case errData e of
                                                         Nothing -> 2
                                                         Just _ -> 3)
     parseJSON _ = empty
