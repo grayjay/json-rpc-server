@@ -28,7 +28,8 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "empty argument array" testEmptyUnnamedArgs
                    , testCase "empty argument object" testEmptyNamedArgs
                    , testCase "allow extra named argument" testAllowExtraNamedArg
-                   , testCase "use default argument" testDefaultArg ]
+                   , testCase "use default argument" testDefaultArg
+                   , testCase "null request ID" testNullId ]
 
 testInvalidJson :: Assertion
 testInvalidJson = checkErrorCode "5" (-32700)
@@ -58,18 +59,24 @@ testNoResponseToInvalidNotification = runIdentity response @?= Nothing
           request = TestRequest "add2" Nothing Nothing
 
 testAllowExtraNamedArg :: Assertion
-testAllowExtraNamedArg = (fromByteString $ fromJust $ runIdentity response) @?= (Just $ TestResponse i (Right $ Number 30))
+testAllowExtraNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 30))
     where response = call (toJsonFunctions [addMethod]) $ encode request
           request = addRequest args i
           args = [("a1", Number 10), ("a2", Number 20), ("a3", String "extra")]
           i = IdString "ID"
 
 testDefaultArg :: Assertion
-testDefaultArg = (fromByteString $ fromJust $ runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1000))
+testDefaultArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1000))
     where response = call (toJsonFunctions [addMethod]) $ encode request
           request = addRequest args i
           args = [("a", Number 500), ("a1", Number 1000)]
           i = IdNumber 3
+
+testNullId :: Assertion
+testNullId = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse IdNull (Right $ Number 60))
+    where response = call (toJsonFunctions [addMethod]) $ encode request
+          request = addRequest args IdNull
+          args = [("a2", Number 70), ("a1", Number (-10))]
 
 testNoArgs :: Assertion
 testNoArgs = compareGetTimeResult Nothing
