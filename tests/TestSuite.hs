@@ -55,26 +55,26 @@ testMissingRequiredArg = checkErrorCode (encode request) (-32602)
 
 testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
-    where response = call (toJsonFunctions [addMethod]) $ encode request
+    where response = call (toJsonMethods [addMethod]) $ encode request
           request = TestRequest "add2" Nothing Nothing
 
 testAllowExtraNamedArg :: Assertion
 testAllowExtraNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 30))
-    where response = call (toJsonFunctions [addMethod]) $ encode request
+    where response = call (toJsonMethods [addMethod]) $ encode request
           request = addRequest args i
           args = [("a1", Number 10), ("a2", Number 20), ("a3", String "extra")]
           i = IdString "ID"
 
 testDefaultArg :: Assertion
 testDefaultArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1000))
-    where response = call (toJsonFunctions [addMethod]) $ encode request
+    where response = call (toJsonMethods [addMethod]) $ encode request
           request = addRequest args i
           args = [("a", Number 500), ("a1", Number 1000)]
           i = IdNumber 3
 
 testNullId :: Assertion
 testNullId = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse IdNull (Right $ Number 60))
-    where response = call (toJsonFunctions [addMethod]) $ encode request
+    where response = call (toJsonMethods [addMethod]) $ encode request
           request = addRequest args IdNull
           args = [("a2", Number 70), ("a1", Number (-10))]
 
@@ -89,7 +89,7 @@ testEmptyNamedArgs = compareGetTimeResult $ Just $ Left H.empty
 
 compareGetTimeResult :: Maybe (Either Object Array) -> Assertion
 compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expected =<<
-                                   ((fromByteString . fromJust) <$> call (toJsonFunctions [getTimeMethod]) (encode getTimeRequest))
+                                   ((fromByteString . fromJust) <$> call (toJsonMethods [getTimeMethod]) (encode getTimeRequest))
     where expected = Just $ TestResponse i (Right $ Number 100)
           getTimeRequest = TestRequest "get_time_seconds" requestArgs (Just i)
           i = IdString "Id 1"
@@ -99,7 +99,7 @@ addRequest args i = TestRequest "add" (Just $ Left $ H.fromList args) (Just i)
 
 checkErrorCode :: B.ByteString -> Int -> Assertion
 checkErrorCode val expectedCode = (getErrorCode =<< runIdentity result) @?= Just expectedCode
-    where result = call (toJsonFunctions [addMethod]) val
+    where result = call (toJsonMethods [addMethod]) val
 
 fromByteString :: FromJSON a => B.ByteString -> Maybe a
 fromByteString x = case fromJSON <$> decode x of
@@ -112,12 +112,12 @@ getErrorCode b = fromByteString b >>= \r ->
                    Just (TestResponse _ (Left (TestRpcError code _ _))) -> Just code
                    _ -> Nothing
 
-addMethod :: JsonFunction Identity
-addMethod = toJsonFunction "add" (\x y -> liftToResult $ Identity (x + y :: Int))
+addMethod :: JsonMethod Identity
+addMethod = toJsonMethod "add" (\x y -> liftToResult $ Identity (x + y :: Int))
             (Required "a1" :+: Optional "a2" 0 :+: ())
 
-getTimeMethod :: JsonFunction IO
-getTimeMethod = toJsonFunction "get_time_seconds" (liftToResult getTestTime) ()
+getTimeMethod :: JsonMethod IO
+getTimeMethod = toJsonMethod "get_time_seconds" (liftToResult getTestTime) ()
 
 getTestTime :: IO Integer
 getTestTime = return 100
