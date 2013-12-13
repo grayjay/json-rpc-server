@@ -6,7 +6,7 @@
              TypeOperators,
              OverloadedStrings #-}
 
--- |Functions for implementing the server side of JSON RPC 2.0 method calls
+-- | Functions for implementing the server side of JSON RPC 2.0.
 module Data.JsonRpc.Server ( RpcResult
                            , RpcError
                            , Param(..)
@@ -38,46 +38,52 @@ import Control.Monad.Error (Error, ErrorT, lift, runErrorT, throwError, strMsg, 
 import Prelude hiding (length)
 
 -- | Parameter expected by a method.
-data Param a = Param { -- | Parameter name.
-                       paramName :: Text
-                       -- | Default value to use when this parameter is omitted.
-                       --   'Nothing' means that the parameter is required.
-                     , paramDefault :: Maybe a }
+data Param a
+    -- | Required parameter with a name.
+    = Required Text
+    -- | Optional parameter with a name and default value.
+    | Optional Text a
 
-data a :+: b = a :+: b
-infixr 5 :+:
+-- | Link in a type-level linked list of 'Param' types.
+data a :+: ps = (Param a) :+: ps
+infixr :+:
 
 -- | Return type of a method. A method call can either fail with an 'RpcError'
 --   or succeed with a result of type 'r'.
 type RpcResult m r = ErrorT RpcError m r
 
 -- | Relationship between a method's function, parameters, monad, and return type.
+--   'p' has one 'Param' for every argument of 'f' and is terminated by @()@.
+--   The return type of 'f' is @m r@.
 class Monad m => MethodParams f p m r | f -> p m r where
     mpApply :: f -> p -> H.HashMap Text Value -> RpcResult m r
 
 instance (ToJSON r, Monad m) => MethodParams (RpcResult m r) () m r where
     mpApply r _ _ = r
 
-instance (FromJSON a, ToJSON r, MethodParams f p m r) => MethodParams (a -> f) (Param a :+: p) m r where
+instance (FromJSON a, ToJSON r, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
     mpApply = applyFunction
 
 applyFunction :: (FromJSON a, MethodParams f p m r)
               => (a -> f)
-              -> Param a :+: p
+              -> a :+: p
               -> H.HashMap Text Value
               -> RpcResult m r
-applyFunction f (Param name d :+: ps) args = do
+applyFunction f (param :+: ps) args = do
         maybeArg' <- maybeArg
         case maybeArg' of
           Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
           Just arg -> mpApply (f arg) ps args
-    where maybeArg = case H.lookup name args of
+    where (name, d) = case param of
+                Required n -> (n, Nothing)
+                Optional n d' -> (n, Just d')
+          maybeArg = case H.lookup name args of
                        Nothing -> return d
                        Just val -> case fromJSON val of
                                      Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
                                      Success x -> return $ Just x
 
--- |Error to be sent to the client
+-- | Error to be returned to the client.
 data RpcError = RpcError Int Text (Maybe Value)
               deriving Show
 
@@ -125,12 +131,12 @@ instance FromJSON Request where
               parseParams = withObject (unpack paramsKey) (return . Left)
     parseJSON _ = empty
 
--- |Creates an 'RpcError' with the given error code and message.
---  Server errors should be in the range -32000 to -32099.
+-- | Creates an 'RpcError' with the given error code and message.
+--   Server errors should be in the range -32000 to -32099.
 rpcError :: Int -> Text -> RpcError
 rpcError code msg = RpcError code msg Nothing
 
--- |Creates an 'RpcError' with the given code, message, and additional data.
+-- | Creates an 'RpcError' with the given code, message, and additional data.
 rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
 rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData
 
@@ -152,29 +158,39 @@ paramsKey = "params"
 idKey :: Text
 idKey = "id"
 
--- |Server method
+-- | Single method.
 data JsonFunction m = JsonFunction Text (H.HashMap Text Value -> RpcResult m Value)
 
--- |Multiple methods
+-- | Multiple methods.
 newtype JsonFunctions m = JsonFunctions (H.HashMap Text (JsonFunction m))
 
--- |Creates a method
+-- | Creates a method from a name, function, and parameter description.
 toJsonFunction :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> JsonFunction m
 toJsonFunction name f params = JsonFunction name g
     where g x = toJSON `liftM` mpApply f params x
 
--- |Creates a set of methods
+-- | Creates a set of methods to be called by name.
 toJsonFunctions :: [JsonFunction m] -> JsonFunctions m
 toJsonFunctions fs = JsonFunctions $ H.fromList $ map (\f@(JsonFunction n _) -> (n, f)) fs
 
--- |Calls the given set of methods with the arguments provided by the input JSON.
---  It is the same as @ callWithBatchStrategy sequence @
-call :: Monad m => JsonFunctions m -> B.ByteString -> m (Maybe B.ByteString)
+-- | Handles one JSON RPC request. It is the same as
+--   @callWithBatchStrategy sequence@.
+call :: Monad m => JsonFunctions m -- ^ Choice of methods to call.
+     -> B.ByteString               -- ^ JSON RPC request.
+     -> m (Maybe B.ByteString)     -- ^ The response wrapped in 'Just', or
+                                   --   'Nothing' in the case of a notification,
+                                   --   all wrapped in the given monad.
 call = callWithBatchStrategy sequence
 
--- |Calls the given set of methods with the arguments provided by the input JSON.
---  The input function determines the evaluation strategy.
-callWithBatchStrategy :: Monad m => (forall a . [m a] -> m [a]) -> JsonFunctions m -> B.ByteString -> m (Maybe B.ByteString)
+-- | Handles one JSON RPC request.
+callWithBatchStrategy :: Monad m =>
+                         (forall a . [m a] -> m [a]) -- ^ Function specifying the
+                                                     --   evaluation strategy.
+                      -> JsonFunctions m             -- ^ Choice of methods to call.
+                      -> B.ByteString                -- ^ JSON RPC request.
+                      -> m (Maybe B.ByteString)      -- ^ The response wrapped in 'Just', or
+                                                     --   'Nothing' in the case of a notification,
+                                                     --   all wrapped in the given monad.
 callWithBatchStrategy strategy fs input = response2 response
     where response = runIdentity $ runErrorT $ do
                        val <- parseJson input
@@ -211,6 +227,6 @@ toResponse :: ToJSON a => Maybe Id -> Either RpcError a -> Maybe Response
 toResponse Nothing _ = Nothing
 toResponse (Just i) r = Just $ Response i (either Left (Right . toJSON) r)
 
--- |Convenience function for lifting the result of method call
+-- | Convenience function for lifting the result of a method call
 liftToResult :: Monad m => m a -> RpcResult m a
 liftToResult = lift
