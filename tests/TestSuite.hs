@@ -114,7 +114,7 @@ getErrorCode b = fromByteString b >>= \r ->
 
 addMethod :: JsonFunction Identity
 addMethod = toJsonFunction "add" (\x y -> liftToResult $ Identity (x + y :: Int))
-            (Param "a1" Nothing :+: Param "a2" (Just 0) :+: ())
+            (Required "a1" :+: Optional "a2" 0 :+: ())
 
 getTimeMethod :: JsonFunction IO
 getTimeMethod = toJsonFunction "get_time_seconds" (liftToResult getTestTime) ()
