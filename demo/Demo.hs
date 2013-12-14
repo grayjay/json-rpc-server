@@ -6,22 +6,23 @@ import Data.JsonRpc.Server
 import Happstack.Server.SimpleHTTP hiding (body, result)
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
+import Control.Monad (when)
 import Control.Monad.Trans (liftIO)
+import Control.Monad.Error (throwError)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Concurrent.MVar
 
 main :: IO ()
-main = do
-  count <- newMVar 0
-  simpleHTTP nullConf $ do
+main = newMVar 0 >>= \count ->
+       simpleHTTP nullConf $ do
          request <- askRq
          body <- liftIO $ getBody request
          result <- runReaderT (call methods body) count
          let resultStr = fromMaybe "" result
          return $ toResponse resultStr
-      where getBody r = unBody `fmap` readMVar (rqBody r)
+    where getBody r = unBody `fmap` readMVar (rqBody r)
 
-type Server = ReaderT (MVar Int) (ServerPartT IO)
+type Server = ReaderT (MVar Integer) (ServerPartT IO)
 
 methods :: JsonMethods Server
 methods = toJsonMethods [printSequence, getCount, add]
@@ -33,11 +34,14 @@ printSequence = toJsonMethod "print" f params
                    Optional "count" 1 :+:
                    Optional "separator" ',' :+: ()
           f :: String -> Int -> Char -> RpcResult Server ()
-          f str c s = liftIO $ print $ intercalate [s] $ replicate c str
+          f str count sep = do
+              when (count < 0) $ throwError negativeCount
+              liftIO $ print $ intercalate [sep] $ replicate count str
+          negativeCount = rpcError (-32000) "negative count"
 
 getCount = toJsonMethod "get_count" f ()
-    where f :: RpcResult Server Int
-          f = ask >>= \c -> liftIO $ modifyMVar c inc
+    where f :: RpcResult Server Integer
+          f = ask >>= \count -> liftIO $ modifyMVar count inc
               where inc x = return (x + 1, x + 1)
 
 add = toJsonMethod "add" f (Required "x" :+: Required "y" :+: ())
