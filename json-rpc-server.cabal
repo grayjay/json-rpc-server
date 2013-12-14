@@ -30,6 +30,21 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall
 
+flag build-demo
+  default: False
+  manual: True
+
+executable demo
+  if !flag (build-demo)
+    buildable:         False
+  main-is:             Demo.hs
+  hs-source-dirs:      demo
+  build-depends:       base >=4.6 && <4.7,
+                       json-rpc-server,
+                       happstack-server >=7.3 && <7.4,
+                       mtl >=2.1 && <2.2
+  ghc-options:         -Wall
+
 test-suite tests
   hs-source-dirs:      tests
   main-is:             TestSuite.hs

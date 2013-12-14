@@ -7,6 +7,8 @@
              OverloadedStrings #-}
 
 -- | Functions for implementing the server side of JSON RPC 2.0.
+--   Here is an example of a simple Happstack server with three methods:
+-- 
 module Data.JsonRpc.Server ( RpcResult
                            , RpcError
                            , Param(..)
@@ -18,7 +20,6 @@ module Data.JsonRpc.Server ( RpcResult
                            , toJsonMethods
                            , call
                            , callWithBatchStrategy
-                           , liftToResult
                            , rpcError
                            , rpcErrorWithData) where
 
@@ -34,7 +35,7 @@ import Data.Attoparsec.Number (Number)
 import Control.Applicative ((<$>), (<*>), empty)
 import Control.Monad (liftM)
 import Control.Monad.Identity (runIdentity)
-import Control.Monad.Error (Error, ErrorT, lift, runErrorT, throwError, strMsg, noMsg)
+import Control.Monad.Error (Error, ErrorT, runErrorT, throwError, strMsg, noMsg)
 import Prelude hiding (length)
 
 -- | Parameter expected by a method.
@@ -226,7 +227,3 @@ batchCall f gs vals = filterJust `liftM` results
 toResponse :: ToJSON a => Maybe Id -> Either RpcError a -> Maybe Response
 toResponse Nothing _ = Nothing
 toResponse (Just i) r = Just $ Response i (either Left (Right . toJSON) r)
-
--- | Convenience function for lifting the result of a method call.
-liftToResult :: Monad m => m a -> RpcResult m a
-liftToResult = lift
