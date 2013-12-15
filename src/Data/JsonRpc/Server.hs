@@ -54,9 +54,10 @@ infixr :+:
 --   or succeed with a result of type 'r'.
 type RpcResult m r = ErrorT RpcError m r
 
--- | Relationship between a method's function, parameters, monad, and return type.
---   'p' has one 'Parameter' for every argument of 'f' and is terminated by @()@.
---   The return type of 'f' is @m r@.
+-- | Relationship between a method's function ('f'), parameters ('p'),
+--   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
+--   every argument of 'f' and is terminated by @()@. The return type
+--   of 'f' is @RpcResult m r@. This class is treated as closed.
 class Monad m => MethodParams f p m r | f -> p m r where
     mpApply :: f -> p -> H.HashMap Text Value -> RpcResult m r
 
@@ -134,11 +135,12 @@ instance FromJSON Request where
     parseJSON _ = empty
 
 -- | Creates an 'RpcError' with the given error code and message.
---   Server errors should be in the range -32000 to -32099.
+--   Server error codes should be in the range -32000 to -32099.
 rpcError :: Int -> Text -> RpcError
 rpcError code msg = RpcError code msg Nothing
 
 -- | Creates an 'RpcError' with the given code, message, and additional data.
+--   Server error codes should be in the range -32000 to -32099.
 rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
 rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData
 
@@ -171,7 +173,7 @@ toMethod :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> Metho
 toMethod name f params = Method name g
     where g x = toJSON `liftM` mpApply f params x
 
--- | Creates a set of methods to be called by name.
+-- | Creates a set of methods to be called by name. The names must be unique.
 toMethods :: [Method m] -> Methods m
 toMethods fs = Methods $ H.fromList $ map (\f@(Method n _) -> (n, f)) fs
 

@@ -6,6 +6,7 @@ version:             0.1.0.0
 license:             MIT
 license-file:        LICENSE
 author:              grayjay
+synopsis:            JSON RPC 2.0 on the server side.
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.8
@@ -13,6 +14,15 @@ description:         An implemation of the server side of JSON RPC 2.0.
                      See <http://www.jsonrpc.org/specification>. This
                      library uses 'ByteString' for input and output,
                      leaving the choice of transport up to the user.
+                     See the 'Data.JsonRpc.Server' module for an example.
+
+sourc-repository head
+  type:                git
+  location:            https://github.com/grayjay/json-rpc-server
+
+flag include-demo
+  default: False
+  manual: True
 
 library
   exposed-modules:     Data.JsonRpc.Server
@@ -27,12 +37,8 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall
 
-flag build-demo
-  default: False
-  manual: True
-
 executable demo
-  if !flag (build-demo)
+  if !flag (include-demo)
     buildable:         False
   main-is:             Demo.hs
   hs-source-dirs:      demo
