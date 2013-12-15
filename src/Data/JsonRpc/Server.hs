@@ -58,13 +58,13 @@ type RpcResult m r = ErrorT RpcError m r
 --   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
-class Monad m => MethodParams f p m r | f -> p m r where
+class (Monad m, ToJSON r) => MethodParams f p m r | f -> p m r where
     mpApply :: f -> p -> H.HashMap Text Value -> RpcResult m r
 
-instance (ToJSON r, Monad m) => MethodParams (RpcResult m r) () m r where
+instance (Monad m, ToJSON r) => MethodParams (RpcResult m r) () m r where
     mpApply r _ _ = r
 
-instance (FromJSON a, ToJSON r, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
+instance (FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
     mpApply = applyFunction
 
 applyFunction :: (FromJSON a, MethodParams f p m r)
