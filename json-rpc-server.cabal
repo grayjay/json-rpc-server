@@ -16,7 +16,7 @@ description:         An implemation of the server side of JSON RPC 2.0.
                      leaving the choice of transport up to the user.
                      See the 'Data.JsonRpc.Server' module for an example.
 
-sourc-repository head
+source-repository head
   type:                git
   location:            https://github.com/grayjay/json-rpc-server
 
