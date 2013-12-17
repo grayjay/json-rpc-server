@@ -9,7 +9,7 @@
 -- | Functions for implementing the server side of JSON RPC 2.0.
 --   Here is an example of a simple Happstack server with three methods:
 --   
--- 
+--   
 module Data.JsonRpc.Server ( RpcResult
                            , RpcError
                            , Parameter(..)
