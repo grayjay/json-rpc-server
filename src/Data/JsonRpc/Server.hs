@@ -30,10 +30,10 @@ import Data.Maybe (catMaybes)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
 import Data.Aeson.Types (Parser, emptyObject)
-import Data.Vector (toList)
+import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Data.Attoparsec.Number (Number)
-import Control.Applicative ((<$>), (<*>), empty)
+import Control.Applicative ((<$>), (<*>), (<|>), empty)
 import Control.Monad (liftM)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (Error, ErrorT, runErrorT, throwError, strMsg, noMsg)
@@ -54,15 +54,19 @@ infixr :+:
 --   or succeed with a result of type 'r'.
 type RpcResult m r = ErrorT RpcError m r
 
+apply :: MethodParams f p m r => f -> p -> Args -> RpcResult m r
+apply f p (Left hm) = mpApplyNamed f p hm
+apply f p (Right vec) = mpApplyUnnamed f p vec
+
 -- | Relationship between a method's function ('f'), parameters ('p'),
 --   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
-class (Monad m, ToJSON r) => MethodParams f p m r | f -> p m r where
+class (Monad m, Functor m, ToJSON r) => MethodParams f p m r | f -> p m r where
     mpApplyNamed :: f -> p -> Object -> RpcResult m r
     mpApplyUnnamed :: f -> p -> Array -> RpcResult m r
 
-instance (Monad m, ToJSON r) => MethodParams (RpcResult m r) () m r where
+instance (Monad m, Functor m, ToJSON r) => MethodParams (RpcResult m r) () m r where
     mpApplyNamed r _ _ = r
     mpApplyUnnamed r _ _ = r
 
@@ -94,7 +98,26 @@ applyUnnamed :: (FromJSON a, MethodParams f p m r)
               -> a :+: p
               -> Array
               -> RpcResult m r
-applyUnnamed f (param :+: ps) args = undefined
+applyUnnamed f (param :+: ps) args = let argIn = V.headM args >>= parseArg name
+                                         arg = argIn <|> paramDefault param
+                                         name = paramName param
+                                     in arg >>= \a -> mpApplyUnnamed (f a) ps (tailOrEmpty args)
+
+tailOrEmpty :: V.Vector a -> V.Vector a
+tailOrEmpty vec = if V.null vec then V.empty else V.tail vec
+
+parseArg :: (Monad m, FromJSON r) => Text -> Value -> RpcResult m r
+parseArg name val = case fromJSON val of
+                      Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
+                      Success x -> return x
+
+paramDefault :: Monad m => Parameter a -> RpcResult m a
+paramDefault (Optional _ d) = return d
+paramDefault (Required name) = throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
+
+paramName :: Parameter a -> Text
+paramName (Optional n _) = n
+paramName (Required n) = n
 
 -- | Error to be returned to the client.
 data RpcError = RpcError Int Text (Maybe Value)
@@ -141,7 +164,8 @@ instance FromJSON Request where
                            (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
                            x .:? idKey
         where parseParams :: Value -> Parser Args
-              parseParams = withObject (unpack paramsKey) (return . Left)
+              parseParams v = withObject (unpack paramsKey) (return . Left) v <|>
+                              withArray (unpack paramsKey) (return . Right) v
     parseJSON _ = empty
 
 -- | Creates an 'RpcError' with the given error code and message.
@@ -182,11 +206,7 @@ newtype Methods m = Methods (H.HashMap Text (Method m))
 
 -- | Creates a method from a name, function, and parameter description.
 toMethod :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> Method m
-toMethod name f params = Method name g
-    where g args = toJSON `liftM` result
-              where result = case args of
-                               Left hm -> mpApplyNamed f params hm
-                               Right vec -> mpApplyUnnamed f params vec
+toMethod name f params = Method name (\args -> toJSON `liftM` apply f params args)
 
 -- | Creates a set of methods to be called by name. The names must be unique.
 toMethods :: [Method m] -> Methods m
@@ -215,7 +235,7 @@ callWithBatchStrategy strategy fs input = response2 response
                        val <- parseJson input
                        case val of
                                 obj@(Object _) -> return ((toJSON <$>) `liftM` singleCall fs obj)
-                                (Array vector) -> return ((toJSON <$>) `liftM` batchCall strategy fs (toList vector))
+                                (Array vector) -> return ((toJSON <$>) `liftM` batchCall strategy fs (V.toList vector))
                                 _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String))
           response2 r = case r of
                           Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err :: Either RpcError ())
