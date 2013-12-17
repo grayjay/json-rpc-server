@@ -35,29 +35,29 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "null request ID" testNullId ]
 
 testInvalidJson :: Assertion
-testInvalidJson = checkErrorCode "5" (-32700)
+testInvalidJson = checkErrorCodeWithAdd "5" (-32700)
 
 testInvalidJsonRpc :: Assertion
-testInvalidJsonRpc = checkErrorCode (encode $ object ["id" .= (10 :: Int)]) (-32600)
+testInvalidJsonRpc = checkErrorCodeWithAdd (encode $ object ["id" .= (10 :: Int)]) (-32600)
 
 testInvalidBatchCall :: Assertion
-testInvalidBatchCall = checkErrorCode (encode emptyArray) (-32600)
+testInvalidBatchCall = checkErrorCodeWithAdd (encode emptyArray) (-32600)
 
 testWrongVersion :: Assertion
-testWrongVersion = checkErrorCode (encode requestWrongVersion) (-32600)
+testWrongVersion = checkErrorCodeWithAdd (encode requestWrongVersion) (-32600)
     where requestWrongVersion = Object $ H.insert jsonRpcVersion (String "1") hm
           Object hm = toJSON $ addRequest [("a1", Number 4)] (IdNumber 10)
 
 testMethodNotFound :: Assertion
-testMethodNotFound = checkErrorCode (encode request) (-32601)
+testMethodNotFound = checkErrorCodeWithAdd (encode request) (-32601)
     where request = TestRequest "ad" Nothing (Just $ IdNumber 3)
 
 testMissingRequiredArg :: Assertion
-testMissingRequiredArg = checkErrorCode (encode request) (-32602)
+testMissingRequiredArg = checkErrorCodeWithAdd (encode request) (-32602)
     where request = addRequest [("a2", Number 20)] (IdNumber 2)
 
 testDisallowExtraUnnamedArg :: Assertion
-testDisallowExtraUnnamedArg = checkErrorCode (encode request) (-32602)
+testDisallowExtraUnnamedArg = checkErrorCodeWithAdd (encode request) (-32602)
     where request = TestRequest "add" args (Just $ IdString "i")
           args = Just $ Right $ V.fromList $ map toJSON [1 :: Int, 2, 3]
 
@@ -105,8 +105,8 @@ compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expecte
 addRequest :: [(Text, Value)] -> TestId -> TestRequest
 addRequest args i = TestRequest "add" (Just $ Left $ H.fromList args) (Just i)
 
-checkErrorCode :: B.ByteString -> Int -> Assertion
-checkErrorCode val expectedCode = (getErrorCode =<< runIdentity result) @?= Just expectedCode
+checkErrorCodeWithAdd :: B.ByteString -> Int -> Assertion
+checkErrorCodeWithAdd val expectedCode = (getErrorCode =<< runIdentity result) @?= Just expectedCode
     where result = call (toMethods [addMethod]) val
 
 fromByteString :: FromJSON a => B.ByteString -> Maybe a
