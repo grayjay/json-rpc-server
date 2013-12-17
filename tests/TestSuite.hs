@@ -9,6 +9,7 @@ import Data.Aeson.Types
 import Data.Text (Text)
 import Data.Maybe
 import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.Applicative
 import Control.Monad.Trans
@@ -24,6 +25,7 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "wrong version in request" testWrongVersion
                    , testCase "method not found" testMethodNotFound
                    , testCase "missing required argument" testMissingRequiredArg
+                   , testCase "disallow extra unnamed arguments" testDisallowExtraUnnamedArg
                    , testCase "invalid notification" testNoResponseToInvalidNotification
                    , testCase "no arguments" testNoArgs
                    , testCase "empty argument array" testEmptyUnnamedArgs
@@ -53,6 +55,11 @@ testMethodNotFound = checkErrorCode (encode request) (-32601)
 testMissingRequiredArg :: Assertion
 testMissingRequiredArg = checkErrorCode (encode request) (-32602)
     where request = addRequest [("a2", Number 20)] (IdNumber 2)
+
+testDisallowExtraUnnamedArg :: Assertion
+testDisallowExtraUnnamedArg = checkErrorCode (encode request) (-32602)
+    where request = TestRequest "add" args (Just $ IdString "i")
+          args = Just $ Right $ V.fromList $ map toJSON [1 :: Int, 2, 3]
 
 testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing

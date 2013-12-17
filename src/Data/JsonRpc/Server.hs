@@ -68,7 +68,8 @@ class (Monad m, Functor m, ToJSON r) => MethodParams f p m r | f -> p m r where
 
 instance (Monad m, Functor m, ToJSON r) => MethodParams (RpcResult m r) () m r where
     mpApplyNamed r _ _ = r
-    mpApplyUnnamed r _ _ = r
+    mpApplyUnnamed r _ args | V.null args = r
+                            | otherwise = throwError $ rpcError (-32602) "Too many unnamed arguments" 
 
 instance (FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
     mpApplyNamed = applyNamed
