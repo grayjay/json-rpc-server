@@ -59,24 +59,27 @@ type RpcResult m r = ErrorT RpcError m r
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
 class (Monad m, ToJSON r) => MethodParams f p m r | f -> p m r where
-    mpApply :: f -> p -> H.HashMap Text Value -> RpcResult m r
+    mpApplyNamed :: f -> p -> Object -> RpcResult m r
+    mpApplyUnnamed :: f -> p -> Array -> RpcResult m r
 
 instance (Monad m, ToJSON r) => MethodParams (RpcResult m r) () m r where
-    mpApply r _ _ = r
+    mpApplyNamed r _ _ = r
+    mpApplyUnnamed r _ _ = r
 
 instance (FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
-    mpApply = applyFunction
+    mpApplyNamed = applyNamed
+    mpApplyUnnamed = applyUnnamed
 
-applyFunction :: (FromJSON a, MethodParams f p m r)
+applyNamed :: (FromJSON a, MethodParams f p m r)
               => (a -> f)
               -> a :+: p
-              -> H.HashMap Text Value
+              -> Object
               -> RpcResult m r
-applyFunction f (param :+: ps) args = do
+applyNamed f (param :+: ps) args = do
         maybeArg' <- maybeArg
         case maybeArg' of
           Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
-          Just arg -> mpApply (f arg) ps args
+          Just arg -> mpApplyNamed (f arg) ps args
     where (name, d) = case param of
                 Required n -> (n, Nothing)
                 Optional n d' -> (n, Just d')
@@ -85,6 +88,13 @@ applyFunction f (param :+: ps) args = do
                        Just val -> case fromJSON val of
                                      Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
                                      Success x -> return $ Just x
+
+applyUnnamed :: (FromJSON a, MethodParams f p m r)
+              => (a -> f)
+              -> a :+: p
+              -> Array
+              -> RpcResult m r
+applyUnnamed f (param :+: ps) args = undefined
 
 -- | Error to be returned to the client.
 data RpcError = RpcError Int Text (Maybe Value)
@@ -123,14 +133,14 @@ instance ToJSON Id where
                  IdNumber x -> toJSON x
                  IdNull -> Null
 
-data Request = Request Text (Either Object Array) (Maybe Id)
+data Request = Request Text Args (Maybe Id)
 
 instance FromJSON Request where
     parseJSON (Object x) = Request <$>
                            x .: methodKey <*>
                            (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
                            x .:? idKey
-        where parseParams :: Value -> Parser (Either Object Array)
+        where parseParams :: Value -> Parser Args
               parseParams = withObject (unpack paramsKey) (return . Left)
     parseJSON _ = empty
 
@@ -163,7 +173,9 @@ idKey :: Text
 idKey = "id"
 
 -- | Single method.
-data Method m = Method Text (H.HashMap Text Value -> RpcResult m Value)
+data Method m = Method Text (Args -> RpcResult m Value)
+
+type Args = Either Object Array
 
 -- | Multiple methods.
 newtype Methods m = Methods (H.HashMap Text (Method m))
@@ -171,7 +183,10 @@ newtype Methods m = Methods (H.HashMap Text (Method m))
 -- | Creates a method from a name, function, and parameter description.
 toMethod :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> Method m
 toMethod name f params = Method name g
-    where g x = toJSON `liftM` mpApply f params x
+    where g args = toJSON `liftM` result
+              where result = case args of
+                               Left hm -> mpApplyNamed f params hm
+                               Right vec -> mpApplyUnnamed f params vec
 
 -- | Creates a set of methods to be called by name. The names must be unique.
 toMethods :: [Method m] -> Methods m
@@ -211,7 +226,7 @@ callWithBatchStrategy strategy fs input = response2 response
 singleCall :: Monad m => Methods m -> Value -> m (Maybe Response)
 singleCall (Methods fs) val = case fromJSON val of
                                       Error msg -> return $ toResponse (Just IdNull) ((Left $ invalidJsonRpc $ Just msg) :: Either RpcError ())
-                                      Success (Request name (Left params) i) -> (toResponse i `liftM`) $ runErrorT $ do
+                                      Success (Request name params i) -> (toResponse i `liftM`) $ runErrorT $ do
                                                                                    Method _ f <- lookupMethod name
                                                                                    f params
     where lookupMethod name = maybe (methodNotFound name) return $ H.lookup name fs
