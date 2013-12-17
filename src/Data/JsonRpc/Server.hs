@@ -79,29 +79,23 @@ applyNamed :: (FromJSON a, MethodParams f p m r)
               -> a :+: p
               -> Object
               -> RpcResult m r
-applyNamed f (param :+: ps) args = do
-        maybeArg' <- maybeArg
-        case maybeArg' of
-          Nothing -> throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
-          Just arg -> mpApplyNamed (f arg) ps args
-    where (name, d) = case param of
-                Required n -> (n, Nothing)
-                Optional n d' -> (n, Just d')
-          maybeArg = case H.lookup name args of
-                       Nothing -> return d
-                       Just val -> case fromJSON val of
-                                     Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
-                                     Success x -> return $ Just x
+applyNamed f (param :+: ps) args = arg >>= \a -> mpApplyNamed (f a) ps args
+    where arg = (lookupM name args >>= parseArg name) <|> paramDefault param
+          name = paramName param
+
+lookupM :: Monad m => Text -> Object -> m Value
+lookupM k hm = case H.lookup k hm of
+                 Nothing -> fail "not in map"
+                 Just v -> return v
 
 applyUnnamed :: (FromJSON a, MethodParams f p m r)
               => (a -> f)
               -> a :+: p
               -> Array
               -> RpcResult m r
-applyUnnamed f (param :+: ps) args = let argIn = V.headM args >>= parseArg name
-                                         arg = argIn <|> paramDefault param
-                                         name = paramName param
-                                     in arg >>= \a -> mpApplyUnnamed (f a) ps (tailOrEmpty args)
+applyUnnamed f (param :+: ps) args = arg >>= \a -> mpApplyUnnamed (f a) ps (tailOrEmpty args)
+    where arg = (V.headM args >>= parseArg name) <|> paramDefault param
+          name = paramName param
 
 tailOrEmpty :: V.Vector a -> V.Vector a
 tailOrEmpty vec = if V.null vec then V.empty else V.tail vec
