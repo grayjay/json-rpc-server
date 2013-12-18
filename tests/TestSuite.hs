@@ -46,7 +46,7 @@ testInvalidBatchCall = checkErrorCodeWithAdd (encode emptyArray) (-32600)
 testWrongVersion :: Assertion
 testWrongVersion = checkErrorCodeWithAdd (encode requestWrongVersion) (-32600)
     where requestWrongVersion = Object $ H.insert jsonRpcVersion (String "1") hm
-          Object hm = toJSON $ addRequest [("a1", Number 4)] (IdNumber 10)
+          Object hm = toJSON $ addRequestNamed [("a1", Number 4)] (IdNumber 10)
 
 testMethodNotFound :: Assertion
 testMethodNotFound = checkErrorCodeWithAdd (encode request) (-32601)
@@ -54,12 +54,11 @@ testMethodNotFound = checkErrorCodeWithAdd (encode request) (-32601)
 
 testMissingRequiredArg :: Assertion
 testMissingRequiredArg = checkErrorCodeWithAdd (encode request) (-32602)
-    where request = addRequest [("a2", Number 20)] (IdNumber 2)
+    where request = addRequestNamed [("a2", Number 20)] (IdNumber 2)
 
 testDisallowExtraUnnamedArg :: Assertion
 testDisallowExtraUnnamedArg = checkErrorCodeWithAdd (encode request) (-32602)
-    where request = TestRequest "add" args (Just $ IdString "i")
-          args = Just $ Right $ V.fromList $ map toJSON [1 :: Int, 2, 3]
+    where request = addRequestUnnamed (map toJSON [1 :: Int, 2, 3]) (IdString "i")
 
 testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
@@ -69,21 +68,21 @@ testNoResponseToInvalidNotification = runIdentity response @?= Nothing
 testAllowExtraNamedArg :: Assertion
 testAllowExtraNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 30))
     where response = call (toMethods [addMethod]) $ encode request
-          request = addRequest args i
+          request = addRequestNamed args i
           args = [("a1", Number 10), ("a2", Number 20), ("a3", String "extra")]
           i = IdString "ID"
 
 testDefaultArg :: Assertion
 testDefaultArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1000))
     where response = call (toMethods [addMethod]) $ encode request
-          request = addRequest args i
+          request = addRequestNamed args i
           args = [("a", Number 500), ("a1", Number 1000)]
           i = IdNumber 3
 
 testNullId :: Assertion
 testNullId = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse IdNull (Right $ Number 60))
     where response = call (toMethods [addMethod]) $ encode request
-          request = addRequest args IdNull
+          request = addRequestNamed args IdNull
           args = [("a2", Number 70), ("a1", Number (-10))]
 
 testNoArgs :: Assertion
@@ -102,8 +101,11 @@ compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expecte
           getTimeRequest = TestRequest "get_time_seconds" requestArgs (Just i)
           i = IdString "Id 1"
 
-addRequest :: [(Text, Value)] -> TestId -> TestRequest
-addRequest args i = TestRequest "add" (Just $ Left $ H.fromList args) (Just i)
+addRequestNamed :: [(Text, Value)] -> TestId -> TestRequest
+addRequestNamed args i = TestRequest "add" (Just $ Left $ H.fromList args) (Just i)
+
+addRequestUnnamed :: [Value] -> TestId -> TestRequest
+addRequestUnnamed args i = TestRequest "add" (Just $ Right $ V.fromList args) (Just i)
 
 checkErrorCodeWithAdd :: B.ByteString -> Int -> Assertion
 checkErrorCodeWithAdd val expectedCode = (getErrorCode =<< runIdentity result) @?= Just expectedCode
