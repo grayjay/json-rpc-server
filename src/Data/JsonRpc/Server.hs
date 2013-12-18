@@ -95,8 +95,12 @@ applyUnnamed :: (FromJSON a, MethodParams f p m r)
               -> Array
               -> RpcResult m r
 applyUnnamed f (param :+: ps) args = arg >>= \a -> mpApplyUnnamed (f a) ps (tailOrEmpty args)
-    where arg = (V.headM args >>= parseArg name) <|> paramDefault param
+    where arg = (headM args >>= parseArg name) <|> paramDefault param
           name = paramName param
+
+headM :: Monad m => V.Vector a -> m a
+headM vec | V.null vec = fail "empty vector"
+          | otherwise = V.headM vec
 
 tailOrEmpty :: V.Vector a -> V.Vector a
 tailOrEmpty vec = if V.null vec then V.empty else V.tail vec
@@ -229,9 +233,10 @@ callWithBatchStrategy strategy fs input = response2 response
     where response = runIdentity $ runErrorT $ do
                        val <- parseJson input
                        case val of
-                                obj@(Object _) -> return ((toJSON <$>) `liftM` singleCall fs obj)
-                                (Array vector) -> return ((toJSON <$>) `liftM` batchCall strategy fs (V.toList vector))
-                                _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String))
+                         obj@(Object _) -> return ((toJSON <$>) `liftM` singleCall fs obj)
+                         Array vector | V.null vector -> throwError $ rpcError (-32600) "empty batch request"
+                                      | otherwise -> return ((toJSON <$>) `liftM` batchCall strategy fs (V.toList vector))
+                         _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String))
           response2 r = case r of
                           Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err :: Either RpcError ())
                           Right maybeVal -> (encode <$>) `liftM` maybeVal
@@ -240,10 +245,10 @@ callWithBatchStrategy strategy fs input = response2 response
 
 singleCall :: Monad m => Methods m -> Value -> m (Maybe Response)
 singleCall (Methods fs) val = case fromJSON val of
-                                      Error msg -> return $ toResponse (Just IdNull) ((Left $ invalidJsonRpc $ Just msg) :: Either RpcError ())
-                                      Success (Request name params i) -> (toResponse i `liftM`) $ runErrorT $ do
-                                                                                   Method _ f <- lookupMethod name
-                                                                                   f params
+                                Error msg -> return $ toResponse (Just IdNull) ((Left $ invalidJsonRpc $ Just msg) :: Either RpcError ())
+                                Success (Request name params i) -> (toResponse i `liftM`) $ runErrorT $ do
+                                                                     Method _ f <- lookupMethod name
+                                                                     f params
     where lookupMethod name = maybe (methodNotFound name) return $ H.lookup name fs
           methodNotFound name = throwError $ rpcError (-32601) ("Method not found: " `append` name)
 
