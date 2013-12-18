@@ -26,15 +26,15 @@ module Data.JsonRpc.Server ( RpcResult
 
 import Data.String
 import Data.Text (Text, append, unpack)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
 import Data.Aeson.Types (Parser, emptyObject)
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Data.Attoparsec.Number (Number)
-import Control.Applicative ((<$>), (<*>), (<|>), empty)
-import Control.Monad (liftM)
+import Control.Applicative ((<$>), (<*>), (<|>), (*>), empty)
+import Control.Monad (liftM, when)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (Error, ErrorT, runErrorT, throwError, strMsg, noMsg)
 import Prelude hiding (length)
@@ -135,7 +135,7 @@ data Response = Response { rspId :: Id
                          , rspResult :: Either RpcError Value }
 
 instance ToJSON Response where
-    toJSON r = object ["jsonrpc" .= jsonRpcVersion, result, "id" .= toJSON (rspId r)]
+    toJSON r = object [versionKey .= jsonRpcVersion, result, "id" .= toJSON (rspId r)]
         where result = either (("error" .=) . toJSON) ("result" .=) (rspResult r)
 
 jsonRpcVersion :: Text
@@ -158,13 +158,16 @@ instance ToJSON Id where
 data Request = Request Text Args (Maybe Id)
 
 instance FromJSON Request where
-    parseJSON (Object x) = Request <$>
+    parseJSON (Object x) = (x .:? versionKey >>= checkVersion) *>
+                           (Request <$>
                            x .: methodKey <*>
                            (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
-                           x .:? idKey
+                           x .:? idKey)
         where parseParams :: Value -> Parser Args
-              parseParams v = withObject (unpack paramsKey) (return . Left) v <|>
-                              withArray (unpack paramsKey) (return . Right) v
+              parseParams val = withObject (unpack paramsKey) (return . Left) val <|>
+                              withArray (unpack paramsKey) (return . Right) val
+              checkVersion ver = let v = fromMaybe jsonRpcVersion ver
+                                 in when (v /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack v)
     parseJSON _ = empty
 
 -- | Creates an 'RpcError' with the given error code and message.
@@ -176,6 +179,9 @@ rpcError code msg = RpcError code msg Nothing
 --   Server error codes should be in the range -32000 to -32099.
 rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
 rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData
+
+versionKey :: Text
+versionKey = "jsonrpc"
 
 codeKey :: Text
 codeKey = "code"
@@ -224,7 +230,7 @@ call = callWithBatchStrategy sequence
 callWithBatchStrategy :: Monad m =>
                          (forall a . [m a] -> m [a]) -- ^ Function specifying the
                                                      --   evaluation strategy.
-                      -> Methods m             -- ^ Choice of methods to call.
+                      -> Methods m                   -- ^ Choice of methods to call.
                       -> B.ByteString                -- ^ JSON RPC request.
                       -> m (Maybe B.ByteString)      -- ^ The response wrapped in 'Just', or
                                                      --   'Nothing' in the case of a notification,

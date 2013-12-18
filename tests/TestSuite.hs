@@ -46,7 +46,7 @@ testInvalidBatchCall = checkErrorCodeWithAdd (encode emptyArray) (-32600)
 
 testWrongVersion :: Assertion
 testWrongVersion = checkErrorCodeWithAdd (encode requestWrongVersion) (-32600)
-    where requestWrongVersion = Object $ H.insert jsonRpcVersion (String "1") hm
+    where requestWrongVersion = Object $ H.insert versionKey (String "1") hm
           Object hm = toJSON $ addRequestNamed [("a1", Number 4)] (IdNumber 10)
 
 testMethodNotFound :: Assertion

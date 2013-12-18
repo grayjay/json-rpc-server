@@ -4,7 +4,8 @@ module TestTypes ( TestRequest (..)
                  , TestResponse (..)
                  , TestRpcError (..)
                  , TestId (..)
-                 , jsonRpcVersion) where
+                 , jsonRpcVersion
+                 , versionKey) where
 
 import Data.Aeson
 import Data.Aeson.Types
