@@ -27,6 +27,7 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "missing required argument" testMissingRequiredArg
                    , testCase "disallow extra unnamed arguments" testDisallowExtraUnnamedArg
                    , testCase "invalid notification" testNoResponseToInvalidNotification
+                   , testCase "allow missing version" testAllowMissingVersion
                    , testCase "no arguments" testNoArgs
                    , testCase "empty argument array" testEmptyUnnamedArgs
                    , testCase "empty argument object" testEmptyNamedArgs
@@ -65,6 +66,13 @@ testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
     where response = call (toMethods [addMethod]) $ encode request
           request = TestRequest "add2" Nothing Nothing
+
+testAllowMissingVersion :: Assertion
+testAllowMissingVersion = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1))
+    where requestNoVersion = Object $ H.delete versionKey hm
+          Object hm = toJSON $ addRequestNamed [("a1", Number 1)] i
+          response = call (toMethods [addMethod]) $ encode requestNoVersion
+          i = IdNumber (-1)
 
 testAllowExtraNamedArg :: Assertion
 testAllowExtraNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 30))
