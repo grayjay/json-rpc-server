@@ -31,7 +31,8 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "empty argument array" testEmptyUnnamedArgs
                    , testCase "empty argument object" testEmptyNamedArgs
                    , testCase "allow extra named argument" testAllowExtraNamedArg
-                   , testCase "use default argument" testDefaultArg
+                   , testCase "use default named argument" testDefaultNamedArg
+                   , testCase "use default unnamed argument" testDefaultUnnamedArg
                    , testCase "null request ID" testNullId ]
 
 testInvalidJson :: Assertion
@@ -58,7 +59,7 @@ testMissingRequiredArg = checkErrorCodeWithAdd (encode request) (-32602)
 
 testDisallowExtraUnnamedArg :: Assertion
 testDisallowExtraUnnamedArg = checkErrorCodeWithAdd (encode request) (-32602)
-    where request = addRequestUnnamed (map toJSON [1 :: Int, 2, 3]) (IdString "i")
+    where request = addRequestUnnamed (map Number [1, 2, 3]) (IdString "i")
 
 testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
@@ -72,12 +73,18 @@ testAllowExtraNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ T
           args = [("a1", Number 10), ("a2", Number 20), ("a3", String "extra")]
           i = IdString "ID"
 
-testDefaultArg :: Assertion
-testDefaultArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1000))
+testDefaultNamedArg :: Assertion
+testDefaultNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1000))
     where response = call (toMethods [addMethod]) $ encode request
           request = addRequestNamed args i
           args = [("a", Number 500), ("a1", Number 1000)]
           i = IdNumber 3
+
+testDefaultUnnamedArg :: Assertion
+testDefaultUnnamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 4))
+    where response = call (toMethods [addMethod]) $ encode request
+          request = addRequestUnnamed [Number 4] i
+          i = IdNumber 0
 
 testNullId :: Assertion
 testNullId = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse IdNull (Right $ Number 60))
