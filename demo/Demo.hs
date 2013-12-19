@@ -45,5 +45,5 @@ getCount = toMethod "get_count" f ()
               where inc x = return (x + 1, x + 1)
 
 add = toMethod "add" f (Required "x" :+: Required "y" :+: ())
-    where f :: Int -> Int -> RpcResult Server Int
+    where f :: Double -> Double -> RpcResult Server Double
           f x y = liftIO $ return (x + y)

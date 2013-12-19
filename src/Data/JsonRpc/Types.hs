@@ -35,6 +35,10 @@ data Parameter a
 data a :+: ps = (Parameter a) :+: ps
 infixr :+:
 
+apply :: MethodParams f p m r => f -> p -> Args -> RpcResult m r
+apply f p (Left hm) = mpApplyNamed f p hm
+apply f p (Right vec) = mpApplyUnnamed f p vec
+
 -- | Relationship between a method's function ('f'), parameters ('p'),
 --   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
 --   every argument of 'f' and is terminated by @()@. The return type

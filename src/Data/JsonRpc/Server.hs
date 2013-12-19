@@ -35,17 +35,15 @@ import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (ErrorT, runErrorT, throwError)
 import Prelude hiding (length)
 
-apply :: MethodParams f p m r => f -> p -> Args -> RpcResult m r
-apply f p (Left hm) = mpApplyNamed f p hm
-apply f p (Right vec) = mpApplyUnnamed f p vec
-
 -- | Creates a method from a name, function, and parameter description.
 toMethod :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> Method m
-toMethod name f params = Method name (\args -> toJSON `liftM` apply f params args)
+toMethod name f params = let f' args = toJSON <$> apply f params args
+                         in Method name f'
 
 -- | Creates a set of methods to be called by name. The names must be unique.
 toMethods :: [Method m] -> Methods m
-toMethods fs = Methods $ H.fromList $ map (\f@(Method n _) -> (n, f)) fs
+toMethods fs = Methods $ H.fromList $ map pair fs
+    where pair mth@(Method name _) = (name, mth)
 
 -- | Handles one JSON RPC request. It is the same as
 --   @callWithBatchStrategy sequence@.
