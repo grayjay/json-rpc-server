@@ -4,6 +4,7 @@ module Main (main) where
 
 import Data.JsonRpc.Server
 import TestTypes
+import Data.List ((\\))
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Text (Text)
@@ -27,6 +28,7 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "missing required argument" testMissingRequiredArg
                    , testCase "disallow extra unnamed arguments" testDisallowExtraUnnamedArg
                    , testCase "invalid notification" testNoResponseToInvalidNotification
+                   , testCase "batch request" testBatch
                    , testCase "allow missing version" testAllowMissingVersion
                    , testCase "no arguments" testNoArgs
                    , testCase "empty argument array" testEmptyUnnamedArgs
@@ -66,6 +68,15 @@ testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
     where response = call (toMethods [subtractMethod]) $ encode request
           request = TestRequest "subtract2" Nothing Nothing
+
+testBatch :: Assertion
+testBatch = assert (fromJust (fromByteString =<< runIdentity response) `equalContents` expected)
+    where expected = [TestResponse i1 (Right $ Number 2), TestResponse i2 (Right $ Number 4)]
+          response = call (toMethods [subtractMethod]) $ encode request
+          request = [subtractRequestNamed (toArgs 10 8) i1, subtractRequestNamed (toArgs 24 20) i2]
+          toArgs x y = [("a1", Number x), ("a2", Number y)]
+          i1 = IdString "1"
+          i2 = IdString "2"
 
 testAllowMissingVersion :: Assertion
 testAllowMissingVersion = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1))
@@ -149,3 +160,6 @@ getTimeMethod = toMethod "get_time_seconds" getTime ()
 
 getTestTime :: IO Integer
 getTestTime = return 100
+
+equalContents :: Eq a => [a] -> [a] -> Bool
+equalContents xs ys = xs \\ ys == [] && ys \\ xs == []
