@@ -47,11 +47,11 @@ toMethods fs = Methods $ H.fromList $ map pair fs
 
 -- | Handles one JSON RPC request. It is the same as
 --   @callWithBatchStrategy sequence@.
-call :: Monad m => Methods m -- ^ Choice of methods to call.
-     -> B.ByteString               -- ^ JSON RPC request.
-     -> m (Maybe B.ByteString)     -- ^ The response wrapped in 'Just', or
-                                   --   'Nothing' in the case of a notification,
-                                   --   all wrapped in the given monad.
+call :: Monad m => Methods m   -- ^ Choice of methods to call.
+     -> B.ByteString           -- ^ JSON RPC request.
+     -> m (Maybe B.ByteString) -- ^ The response wrapped in 'Just', or
+                               --   'Nothing' in the case of a notification,
+                               --   all wrapped in the given monad.
 call = callWithBatchStrategy sequence
 
 -- | Handles one JSON RPC request.
@@ -89,13 +89,14 @@ singleCall (Methods fs) val = case fromJSON val of
 invalidJsonRpc :: Maybe String -> RpcError
 invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
 
-batchCall :: Monad m => (forall a. [m a] -> m [a]) -> Methods m -> [Value] -> m (Maybe [Response])
-batchCall f gs vals = filterJust `liftM` results
-    where results = f $ map (singleCall gs) vals
-          filterJust rs = case catMaybes rs of
-                            [] -> Nothing
-                            xs -> Just xs
+batchCall :: Monad m => (forall a. [m a] -> m [a])
+          -> Methods m
+          -> [Value]
+          -> m (Maybe [Response])
+batchCall strategy mths vals = (noNull . catMaybes) `liftM` results
+    where results = strategy $ map (singleCall mths) vals
+          noNull rs = if null $ rs then Nothing else Just rs
 
 toResponse :: ToJSON a => Maybe Id -> Either RpcError a -> Maybe Response
+toResponse (Just i) r = Just $ Response i $ toJSON <$> r
 toResponse Nothing _ = Nothing
-toResponse (Just i) r = Just $ Response i (either Left (Right . toJSON) r)
