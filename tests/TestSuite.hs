@@ -37,67 +37,67 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "null request ID" testNullId ]
 
 testInvalidJson :: Assertion
-testInvalidJson = checkErrorCodeWithAdd "5" (-32700)
+testInvalidJson = checkErrorCodeWithSubtract "5" (-32700)
 
 testInvalidJsonRpc :: Assertion
-testInvalidJsonRpc = checkErrorCodeWithAdd (encode $ object ["id" .= (10 :: Int)]) (-32600)
+testInvalidJsonRpc = checkErrorCodeWithSubtract (encode $ object ["id" .= (10 :: Int)]) (-32600)
 
 testInvalidBatchCall :: Assertion
-testInvalidBatchCall = checkErrorCodeWithAdd (encode emptyArray) (-32600)
+testInvalidBatchCall = checkErrorCodeWithSubtract (encode emptyArray) (-32600)
 
 testWrongVersion :: Assertion
-testWrongVersion = checkErrorCodeWithAdd (encode requestWrongVersion) (-32600)
+testWrongVersion = checkErrorCodeWithSubtract (encode requestWrongVersion) (-32600)
     where requestWrongVersion = Object $ H.insert versionKey (String "1") hm
-          Object hm = toJSON $ addRequestNamed [("a1", Number 4)] (IdNumber 10)
+          Object hm = toJSON $ subtractRequestNamed [("a1", Number 4)] (IdNumber 10)
 
 testMethodNotFound :: Assertion
-testMethodNotFound = checkErrorCodeWithAdd (encode request) (-32601)
+testMethodNotFound = checkErrorCodeWithSubtract (encode request) (-32601)
     where request = TestRequest "ad" Nothing (Just $ IdNumber 3)
 
 testMissingRequiredArg :: Assertion
-testMissingRequiredArg = checkErrorCodeWithAdd (encode request) (-32602)
-    where request = addRequestNamed [("a2", Number 20)] (IdNumber 2)
+testMissingRequiredArg = checkErrorCodeWithSubtract (encode request) (-32602)
+    where request = subtractRequestNamed [("a2", Number 20)] (IdNumber 2)
 
 testDisallowExtraUnnamedArg :: Assertion
-testDisallowExtraUnnamedArg = checkErrorCodeWithAdd (encode request) (-32602)
-    where request = addRequestUnnamed (map Number [1, 2, 3]) (IdString "i")
+testDisallowExtraUnnamedArg = checkErrorCodeWithSubtract (encode request) (-32602)
+    where request = subtractRequestUnnamed (map Number [1, 2, 3]) (IdString "i")
 
 testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
-    where response = call (toMethods [addMethod]) $ encode request
-          request = TestRequest "add2" Nothing Nothing
+    where response = call (toMethods [subtractMethod]) $ encode request
+          request = TestRequest "subtract2" Nothing Nothing
 
 testAllowMissingVersion :: Assertion
 testAllowMissingVersion = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1))
     where requestNoVersion = Object $ H.delete versionKey hm
-          Object hm = toJSON $ addRequestNamed [("a1", Number 1)] i
-          response = call (toMethods [addMethod]) $ encode requestNoVersion
+          Object hm = toJSON $ subtractRequestNamed [("a1", Number 1)] i
+          response = call (toMethods [subtractMethod]) $ encode requestNoVersion
           i = IdNumber (-1)
 
 testAllowExtraNamedArg :: Assertion
-testAllowExtraNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 30))
-    where response = call (toMethods [addMethod]) $ encode request
-          request = addRequestNamed args i
+testAllowExtraNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number (-10)))
+    where response = call (toMethods [subtractMethod]) $ encode request
+          request = subtractRequestNamed args i
           args = [("a1", Number 10), ("a2", Number 20), ("a3", String "extra")]
           i = IdString "ID"
 
 testDefaultNamedArg :: Assertion
 testDefaultNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1000))
-    where response = call (toMethods [addMethod]) $ encode request
-          request = addRequestNamed args i
+    where response = call (toMethods [subtractMethod]) $ encode request
+          request = subtractRequestNamed args i
           args = [("a", Number 500), ("a1", Number 1000)]
           i = IdNumber 3
 
 testDefaultUnnamedArg :: Assertion
 testDefaultUnnamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 4))
-    where response = call (toMethods [addMethod]) $ encode request
-          request = addRequestUnnamed [Number 4] i
+    where response = call (toMethods [subtractMethod]) $ encode request
+          request = subtractRequestUnnamed [Number 4] i
           i = IdNumber 0
 
 testNullId :: Assertion
 testNullId = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse IdNull (Right $ Number 60))
-    where response = call (toMethods [addMethod]) $ encode request
-          request = addRequestNamed args IdNull
+    where response = call (toMethods [subtractMethod]) $ encode request
+          request = subtractRequestNamed args IdNull
           args = [("a2", Number 70), ("a1", Number (-10))]
 
 testNoArgs :: Assertion
@@ -116,15 +116,15 @@ compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expecte
           getTimeRequest = TestRequest "get_time_seconds" requestArgs (Just i)
           i = IdString "Id 1"
 
-addRequestNamed :: [(Text, Value)] -> TestId -> TestRequest
-addRequestNamed args i = TestRequest "add" (Just $ Left $ H.fromList args) (Just i)
+subtractRequestNamed :: [(Text, Value)] -> TestId -> TestRequest
+subtractRequestNamed args i = TestRequest "subtract" (Just $ Left $ H.fromList args) (Just i)
 
-addRequestUnnamed :: [Value] -> TestId -> TestRequest
-addRequestUnnamed args i = TestRequest "add" (Just $ Right $ V.fromList args) (Just i)
+subtractRequestUnnamed :: [Value] -> TestId -> TestRequest
+subtractRequestUnnamed args i = TestRequest "subtract" (Just $ Right $ V.fromList args) (Just i)
 
-checkErrorCodeWithAdd :: B.ByteString -> Int -> Assertion
-checkErrorCodeWithAdd val expectedCode = (getErrorCode =<< runIdentity result) @?= Just expectedCode
-    where result = call (toMethods [addMethod]) val
+checkErrorCodeWithSubtract :: B.ByteString -> Int -> Assertion
+checkErrorCodeWithSubtract val expectedCode = (getErrorCode =<< runIdentity result) @?= Just expectedCode
+    where result = call (toMethods [subtractMethod]) val
 
 fromByteString :: FromJSON a => B.ByteString -> Maybe a
 fromByteString x = case fromJSON <$> decode x of
@@ -137,10 +137,10 @@ getErrorCode b = fromByteString b >>= \r ->
                    Just (TestResponse _ (Left (TestRpcError code _ _))) -> Just code
                    _ -> Nothing
 
-addMethod :: Method Identity
-addMethod = toMethod "add" add (Required "a1" :+: Optional "a2" 0 :+: ())
-            where add :: Int -> Int -> RpcResult Identity Int
-                  add x y = return (x + y)
+subtractMethod :: Method Identity
+subtractMethod = toMethod "subtract" sub (Required "a1" :+: Optional "a2" 0 :+: ())
+            where sub :: Int -> Int -> RpcResult Identity Int
+                  sub x y = return (x - y)
 
 getTimeMethod :: Method IO
 getTimeMethod = toMethod "get_time_seconds" getTime ()
