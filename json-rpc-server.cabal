@@ -26,6 +26,7 @@ flag include-demo
 
 library
   exposed-modules:     Data.JsonRpc.Server
+  other-modules:       Data.JsonRpc.Types
   build-depends:       base >=4.6 && <4.7,
                        aeson >=0.6 && <0.7,
                        bytestring >=0.10 && <0.11,
