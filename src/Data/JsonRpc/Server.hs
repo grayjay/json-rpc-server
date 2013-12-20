@@ -32,7 +32,7 @@ module Data.JsonRpc.Server (
                            , rpcErrorWithData) where
 
 import Data.JsonRpc.Types
-import Data.Text (Text, append, pack)
+import Data.Text (Text, append)
 import Data.Maybe (catMaybes)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
@@ -40,7 +40,7 @@ import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.Applicative ((<$>))
 import Control.Monad (liftM)
-import Control.Monad.Identity (runIdentity)
+import Control.Monad.Identity (Identity, runIdentity)
 import Control.Monad.Error (ErrorT, runErrorT, throwError)
 import Prelude hiding (length)
 
@@ -96,7 +96,7 @@ callWithBatchStrategy :: Monad m =>
                                                      --   'Nothing' in the case of a notification,
                                                      --   all wrapped in the given monad.
 callWithBatchStrategy strategy fs input = response2 response
-    where response = runIdentity $ runErrorT $ do
+    where response = runIdentityResult $ do
                        val <- parseJson input
                        case val of
                          obj@(Object _) -> return ((toJSON <$>) `liftM` singleCall fs obj)
@@ -104,22 +104,40 @@ callWithBatchStrategy strategy fs input = response2 response
                                       | otherwise -> return ((toJSON <$>) `liftM` batchCall strategy fs (V.toList vector))
                          _ -> throwError $ invalidJsonRpc (Just "Not a JSON object or array")
           response2 r = case r of
-                          Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err :: Either RpcError ())
+                          Left err -> return $ Just $ encode $ toJSON $ nullIdResponse err
                           Right maybeVal -> (encode <$>) `liftM` maybeVal
           parseJson = maybe invalidJson return . decode
           invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
 
 singleCall :: Monad m => Methods m -> Value -> m (Maybe Response)
-singleCall (Methods fs) val = case fromJSON val of
-                                Error msg -> return $ toResponse (Just IdNull) ((Left $ invalidJsonRpc $ Just $ pack msg) :: Either RpcError ())
-                                Success (Request name params i) -> (toResponse i `liftM`) $ runErrorT $ do
-                                                                     Method _ f <- lookupMethod name
-                                                                     f params
-    where lookupMethod name = maybe (methodNotFound name) return $ H.lookup name fs
-          methodNotFound name = throwError $ rpcError (-32601) ("Method not found: " `append` name)
+singleCall (Methods fs) val = case parsed of
+                                Left err -> return $ nullIdResponse err
+                                Right (Request name args i) ->
+                                  toResponse i `liftM` (runErrorT $ applyMethodTo args =<< method)
+                                    where method = lookupMethod name fs
+    where parsed = runIdentityResult $ parseValue val
+          applyMethodTo args (Method _ f) = f args
+
+nullIdResponse :: RpcError -> Maybe Response
+nullIdResponse err = toResponse (Just IdNull) (Left err :: Either RpcError ())
+
+parseValue :: (FromJSON a, Monad m) => Value -> RpcResult m a
+parseValue val = case fromJSON val of
+                   Error msg -> throwError $ rpcErrorWithData (-32600) invalidRpcMsg msg
+                   Success x -> return x
+
+lookupMethod :: Monad m => Text -> H.HashMap Text (Method m) -> RpcResult m (Method m)
+lookupMethod name = maybe notFound return . H.lookup name
+    where notFound = throwError $ rpcError (-32601) ("Method not found: " `append` name)
+
+invalidRpcMsg :: Text
+invalidRpcMsg = "Invalid JSON RPC 2.0 request"
 
 invalidJsonRpc :: Maybe Text -> RpcError
 invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
+
+runIdentityResult :: RpcResult Identity a -> Either RpcError a
+runIdentityResult = runIdentity . runErrorT
 
 batchCall :: Monad m => (forall a. [m a] -> m [a])
           -> Methods m
