@@ -95,18 +95,20 @@ callWithBatchStrategy :: Monad m =>
                       -> m (Maybe B.ByteString)      -- ^ The response wrapped in 'Just', or
                                                      --   'Nothing' in the case of a notification,
                                                      --   all wrapped in the given monad.
-callWithBatchStrategy strategy fs input = response2 response
-    where response = runIdentityResult $ do
-                       val <- parseJson input
-                       case val of
-                         obj@(Object _) -> return ((toJSON <$>) `liftM` singleCall fs obj)
-                         Array vector | V.null vector -> throwError $ rpcError (-32600) "empty batch request"
-                                      | otherwise -> return ((toJSON <$>) `liftM` batchCall strategy fs (V.toList vector))
-                         _ -> throwError $ invalidJsonRpc (Just "Not a JSON object or array")
-          response2 r = case r of
-                          Left err -> return $ Just $ encode $ toJSON $ nullIdResponse err
-                          Right maybeVal -> (encode <$>) `liftM` maybeVal
+callWithBatchStrategy strategy fs input = either returnErr callMethod request
+    where request :: Either RpcError (Either Value [Value])
+          request = runIdentityResult $ parseVal =<< parseJson input
           parseJson = maybe invalidJson return . decode
+          parseVal val = case val of
+                           obj@(Object _) -> return $ Left obj
+                           Array vec | V.null vec -> throwError $ rpcError (-32600) "empty batch request"
+                                     | otherwise -> return $ Right $ V.toList vec
+                           _ -> throwError $ invalidJsonRpc (Just "Not a JSON object or array")
+          callMethod rq = case rq of
+                            Left val -> encodeJust `liftM` singleCall fs val
+                            Right vals -> encodeJust `liftM` batchCall strategy fs vals
+              where encodeJust r = (encode . toJSON) <$> r
+          returnErr = return . Just . encode . toJSON . nullIdResponse
           invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
 
 singleCall :: Monad m => Methods m -> Value -> m (Maybe Response)

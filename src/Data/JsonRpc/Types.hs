@@ -127,7 +127,7 @@ data Response = Response { rspId :: Id
 
 instance ToJSON Response where
     toJSON r = object [versionKey .= jsonRpcVersion, result, "id" .= toJSON (rspId r)]
-        where result = either (("error" .=) . toJSON) ("result" .=) (rspResult r)
+        where result = either (("error" .=) . toJSON) ("result" .=) $ rspResult r
 
 data Id = IdString Text | IdNumber Number | IdNull
 
