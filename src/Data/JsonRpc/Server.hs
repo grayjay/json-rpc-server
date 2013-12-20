@@ -22,8 +22,7 @@ module Data.JsonRpc.Server ( RpcResult
                            , rpcErrorWithData) where
 
 import Data.JsonRpc.Types
-import Data.String
-import Data.Text (Text, append)
+import Data.Text (Text, append, pack)
 import Data.Maybe (catMaybes)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
@@ -70,7 +69,7 @@ callWithBatchStrategy strategy fs input = response2 response
                          obj@(Object _) -> return ((toJSON <$>) `liftM` singleCall fs obj)
                          Array vector | V.null vector -> throwError $ rpcError (-32600) "empty batch request"
                                       | otherwise -> return ((toJSON <$>) `liftM` batchCall strategy fs (V.toList vector))
-                         _ -> throwError $ invalidJsonRpc (Just ("Not a JSON object or array" :: String))
+                         _ -> throwError $ invalidJsonRpc (Just "Not a JSON object or array")
           response2 r = case r of
                           Left err -> return $ Just $ encode $ toJSON $ toResponse (Just IdNull) (Left err :: Either RpcError ())
                           Right maybeVal -> (encode <$>) `liftM` maybeVal
@@ -79,14 +78,14 @@ callWithBatchStrategy strategy fs input = response2 response
 
 singleCall :: Monad m => Methods m -> Value -> m (Maybe Response)
 singleCall (Methods fs) val = case fromJSON val of
-                                Error msg -> return $ toResponse (Just IdNull) ((Left $ invalidJsonRpc $ Just msg) :: Either RpcError ())
+                                Error msg -> return $ toResponse (Just IdNull) ((Left $ invalidJsonRpc $ Just $ pack msg) :: Either RpcError ())
                                 Success (Request name params i) -> (toResponse i `liftM`) $ runErrorT $ do
                                                                      Method _ f <- lookupMethod name
                                                                      f params
     where lookupMethod name = maybe (methodNotFound name) return $ H.lookup name fs
           methodNotFound name = throwError $ rpcError (-32601) ("Method not found: " `append` name)
 
-invalidJsonRpc :: Maybe String -> RpcError
+invalidJsonRpc :: Maybe Text -> RpcError
 invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
 
 batchCall :: Monad m => (forall a. [m a] -> m [a])
@@ -95,7 +94,7 @@ batchCall :: Monad m => (forall a. [m a] -> m [a])
           -> m (Maybe [Response])
 batchCall strategy mths vals = (noNull . catMaybes) `liftM` results
     where results = strategy $ map (singleCall mths) vals
-          noNull rs = if null $ rs then Nothing else Just rs
+          noNull rs = if null rs then Nothing else Just rs
 
 toResponse :: ToJSON a => Maybe Id -> Either RpcError a -> Maybe Response
 toResponse (Just i) r = Just $ Response i $ toJSON <$> r

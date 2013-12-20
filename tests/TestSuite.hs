@@ -162,4 +162,5 @@ getTestTime :: IO Integer
 getTestTime = return 100
 
 equalContents :: Eq a => [a] -> [a] -> Bool
-equalContents xs ys = xs \\ ys == [] && ys \\ xs == []
+equalContents xs ys = null (xs \\ ys) &&
+                      null (ys \\ xs)
