@@ -32,7 +32,7 @@ module Data.JsonRpc.Server (
                            , rpcErrorWithData) where
 
 import Data.JsonRpc.Types
-import Data.Text (Text, append)
+import Data.Text (Text, append, pack)
 import Data.Maybe (catMaybes)
 import qualified Data.ByteString.Lazy as B
 import Data.Aeson
@@ -101,9 +101,9 @@ callWithBatchStrategy strategy fs input = either returnErr callMethod request
           parseJson = maybe invalidJson return . decode
           parseVal val = case val of
                            obj@(Object _) -> return $ Left obj
-                           Array vec | V.null vec -> throwError $ rpcError (-32600) "empty batch request"
+                           Array vec | V.null vec -> throwError $ invalidRpcError "Empty batch request"
                                      | otherwise -> return $ Right $ V.toList vec
-                           _ -> throwError $ invalidJsonRpc (Just "Not a JSON object or array")
+                           _ -> throwError $ invalidRpcError "Not a JSON object or array"
           callMethod rq = case rq of
                             Left val -> encodeJust `liftM` singleCall fs val
                             Right vals -> encodeJust `liftM` batchCall strategy fs vals
@@ -125,18 +125,15 @@ nullIdResponse err = toResponse (Just IdNull) (Left err :: Either RpcError ())
 
 parseValue :: (FromJSON a, Monad m) => Value -> RpcResult m a
 parseValue val = case fromJSON val of
-                   Error msg -> throwError $ rpcErrorWithData (-32600) invalidRpcMsg msg
+                   Error msg -> throwError $ invalidRpcError $ pack msg
                    Success x -> return x
 
 lookupMethod :: Monad m => Text -> H.HashMap Text (Method m) -> RpcResult m (Method m)
 lookupMethod name = maybe notFound return . H.lookup name
     where notFound = throwError $ rpcError (-32601) ("Method not found: " `append` name)
 
-invalidRpcMsg :: Text
-invalidRpcMsg = "Invalid JSON RPC 2.0 request"
-
-invalidJsonRpc :: Maybe Text -> RpcError
-invalidJsonRpc = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
+invalidRpcError :: Text -> RpcError
+invalidRpcError = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
 
 runIdentityResult :: RpcResult Identity a -> Either RpcError a
 runIdentityResult = runIdentity . runErrorT
