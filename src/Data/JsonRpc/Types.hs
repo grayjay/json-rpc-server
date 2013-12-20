@@ -157,12 +157,14 @@ instance ToJSON RpcError where
               dataPair = maybe [] (\d -> [dataKey .= toJSON d]) data'
 
 -- | Creates an 'RpcError' with the given error code and message.
---   Server error codes should be in the range -32000 to -32099.
+--   According to the specification, server error codes should be
+--   in the range -32099 to -32000, and application defined errors
+--   should be outside the range -32768 to -32000.
 rpcError :: Int -> Text -> RpcError
 rpcError code msg = RpcError code msg Nothing
 
 -- | Creates an 'RpcError' with the given code, message, and additional data.
---   Server error codes should be in the range -32000 to -32099.
+--   See 'rpcError' for the recommended error code ranges.
 rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
 rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData
 

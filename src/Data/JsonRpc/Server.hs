@@ -4,20 +4,30 @@
              OverloadedStrings #-}
 
 -- | Functions for implementing the server side of JSON RPC 2.0.
---   Here is an example of a simple Happstack server with three methods:
---   
---   
-module Data.JsonRpc.Server ( RpcResult
-                           , RpcError
-                           , Parameter(..)
-                           , (:+:) (..)
-                           , MethodParams
+--   See <http://www.jsonrpc.org/specification>.
+module Data.JsonRpc.Server (
+                          -- ** Instructions
+                          -- $instructions
+
+                          -- ** Unnamed and Optional Arguments
+                          -- $arguments
+
+                          -- ** Example
+                          -- $example
+
+                          -- ** Methods
+                             RpcResult
                            , Method
                            , toMethod
                            , Methods
                            , toMethods
                            , call
                            , callWithBatchStrategy
+                           , Parameter(..)
+                           , (:+:) (..)
+                           , MethodParams
+                          -- ** Errors
+                           , RpcError
                            , rpcError
                            , rpcErrorWithData) where
 
@@ -34,7 +44,30 @@ import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (ErrorT, runErrorT, throwError)
 import Prelude hiding (length)
 
--- | Creates a method from a name, function, and parameter description.
+-- $instructions
+-- * Create methods by calling 'toMethod' and providing the method
+--   names, lists of parameters, and functions to be called.
+--
+-- * Create a set of methods by calling 'toMethods'.
+--
+-- * Process a request by calling 'call' or 'callWithBatchStrategy'
+--   on the 'Methods' and input 'B.ByteString'.
+
+-- $arguments
+-- RPC methods can have any mix of required and optional parameters.
+-- When a request uses unnamed arguments, the function is applied to
+-- the arguments in order.  The function will be called as long as
+-- all required arguments are specified, and the number of arguments
+-- provided is not greater than the total number of required and
+-- optional parameters.
+
+-- $example
+-- Here is an example of a simple Happstack server with three methods.
+-- Compile it with the build flag @include-demo@.
+--   
+--   
+
+-- | Creates a method from a name, function, and parameter descriptions.
 toMethod :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> Method m
 toMethod name f params = let f' args = toJSON <$> apply f params args
                          in Method name f'
