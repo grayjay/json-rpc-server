@@ -115,7 +115,7 @@ singleCall :: Monad m => Methods m -> Value -> m (Maybe Response)
 singleCall (Methods fs) val = case parsed of
                                 Left err -> return $ nullIdResponse err
                                 Right (Request name args i) ->
-                                  toResponse i `liftM` (runErrorT $ applyMethodTo args =<< method)
+                                  toResponse i `liftM` runErrorT (applyMethodTo args =<< method)
                                     where method = lookupMethod name fs
     where parsed = runIdentityResult $ parseValue val
           applyMethodTo args (Method _ f) = f args

@@ -62,13 +62,13 @@ applyNamed :: (FromJSON a, MethodParams f p m r)
               -> Object
               -> RpcResult m r
 applyNamed f (param :+: ps) args = arg >>= \a -> mpApplyNamed (f a) ps args
-    where arg = (lookupM name args >>= parseArg name) <|> paramDefault param
+    where arg = (lookupArg name args >>= parseArg name) <|> paramDefault param
           name = paramName param
 
-lookupM :: Monad m => Text -> Object -> m Value
-lookupM k hm = case H.lookup k hm of
-                 Nothing -> fail "not in map"
-                 Just v -> return v
+lookupArg :: Monad m => Text -> Object -> RpcResult m Value
+lookupArg name hm = case H.lookup name hm of
+                      Nothing -> throwError $ missingArgError name
+                      Just v -> return v
 
 applyUnnamed :: (FromJSON a, MethodParams f p m r)
               => (a -> f)
@@ -76,24 +76,27 @@ applyUnnamed :: (FromJSON a, MethodParams f p m r)
               -> Array
               -> RpcResult m r
 applyUnnamed f (param :+: ps) args = arg >>= \a -> mpApplyUnnamed (f a) ps (tailOrEmpty args)
-    where arg = (headM args >>= parseArg name) <|> paramDefault param
+    where arg = (headArg name args >>= parseArg name) <|> paramDefault param
           name = paramName param
 
-headM :: Monad m => V.Vector a -> m a
-headM vec | V.null vec = fail "empty vector"
-          | otherwise = V.headM vec
+headArg :: Monad m => Text -> V.Vector a -> RpcResult m a
+headArg name vec | V.null vec = throwError $ missingArgError name
+                 | otherwise = V.headM vec
 
 tailOrEmpty :: V.Vector a -> V.Vector a
 tailOrEmpty vec = if V.null vec then V.empty else V.tail vec
 
 parseArg :: (Monad m, FromJSON r) => Text -> Value -> RpcResult m r
 parseArg name val = case fromJSON val of
-                      Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) (Just msg)
+                      Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) msg
                       Success x -> return x
 
 paramDefault :: Monad m => Parameter a -> RpcResult m a
 paramDefault (Optional _ d) = return d
-paramDefault (Required name) = throwError $ RpcError (-32602) ("Cannot find required argument: " `append` name) Nothing
+paramDefault (Required name) = throwError $ missingArgError name
+
+missingArgError :: Text -> RpcError
+missingArgError name = rpcError (-32602) ("Cannot find required argument: " `append` name)
 
 paramName :: Parameter a -> Text
 paramName (Optional n _) = n
