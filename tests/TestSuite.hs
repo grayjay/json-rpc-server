@@ -1,10 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, PatternGuards #-}
 
 module Main (main) where
 
 import Data.JsonRpc.Server
 import TestTypes
-import Data.List ((\\))
+import Data.List ((\\), sort)
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Text (Text)
@@ -15,6 +15,8 @@ import qualified Data.HashMap.Strict as H
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.Identity
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar
 import Test.HUnit
 import Test.Framework
 import Test.Framework.Providers.HUnit
@@ -36,7 +38,8 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "allow extra named argument" testAllowExtraNamedArg
                    , testCase "use default named argument" testDefaultNamedArg
                    , testCase "use default unnamed argument" testDefaultUnnamedArg
-                   , testCase "null request ID" testNullId ]
+                   , testCase "null request ID" testNullId
+                   , testCase "parallelize tasks" testParallelizingTasks ]
 
 testInvalidJson :: Assertion
 testInvalidJson = checkErrorCodeWithSubtract "5" (-32700)
@@ -119,6 +122,37 @@ testEmptyUnnamedArgs = compareGetTimeResult $ Just $ Right empty
 
 testEmptyNamedArgs :: Assertion
 testEmptyNamedArgs = compareGetTimeResult $ Just $ Left H.empty
+
+testParallelizingTasks :: Assertion
+testParallelizingTasks = assert $ do
+                           a <- actual
+                           let ids = map fromIdNumber a
+                               vals = map fromResult a
+                           return $ (sort ids == [1, 2, 3]) &&
+                                    (sort vals == ["A", "B", "C"])
+    where actual = (fromJust . fromByteString . fromJust) <$> (flip (callWithBatchStrategy parallelize) input =<< methods)
+          input = encode [ lockRequest 1, lockRequest 2, unlockRequest (String "A")
+                         , unlockRequest (String "B"), unlockRequest (String "C"), lockRequest 3]
+          lockRequest i = TestRequest "lock" Nothing (Just $ IdNumber i)
+          unlockRequest str = TestRequest "unlock" (Just $ Right $ V.fromList [str]) Nothing
+          methods = createMethods <$> newEmptyMVar
+          createMethods lock = toMethods [lockMethod lock, unlockMethod lock]
+          lockMethod lock = toMethod "lock" f ()
+              where f :: RpcResult IO String
+                    f = liftIO $ takeMVar lock
+          unlockMethod lock = toMethod "unlock" f (Required "value" :+: ())
+              where f :: String -> RpcResult IO ()
+                    f val = liftIO $ putMVar lock val
+          fromResult r | Right (String str) <- rspResult r = str
+          fromIdNumber r | IdNumber i <- rspId r = i
+
+parallelize :: [IO a] -> IO [a]
+parallelize tasks = do
+  results <- forM tasks $ \t -> do
+                      mvar <- newEmptyMVar
+                      forkIO $ putMVar mvar =<< t
+                      return mvar
+  forM results takeMVar
 
 compareGetTimeResult :: Maybe (Either Object Array) -> Assertion
 compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expected =<<
