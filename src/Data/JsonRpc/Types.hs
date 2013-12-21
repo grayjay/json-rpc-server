@@ -120,7 +120,7 @@ instance FromJSON Request where
                            x .:? idKey)
         where parseParams :: Value -> Parser Args
               parseParams val = withObject (unpack paramsKey) (return . Left) val <|>
-                              withArray (unpack paramsKey) (return . Right) val
+                                withArray (unpack paramsKey) (return . Right) val
               checkVersion ver = let v = fromMaybe jsonRpcVersion ver
                                  in when (v /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack v)
     parseJSON _ = empty

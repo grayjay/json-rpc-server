@@ -68,6 +68,7 @@ import Prelude hiding (length)
 --   
 
 -- | Creates a method from a name, function, and parameter descriptions.
+--   The parameter names must be unique.
 toMethod :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> Method m
 toMethod name f params = let f' args = toJSON <$> apply f params args
                          in Method name f'
@@ -97,7 +98,7 @@ callWithBatchStrategy :: Monad m =>
                                                      --   all wrapped in the given monad.
 callWithBatchStrategy strategy fs input = either returnErr callMethod request
     where request :: Either RpcError (Either Value [Value])
-          request = runIdentityResult $ parseVal =<< parseJson input
+          request = runIdentity $ runErrorT $ parseVal =<< parseJson input
           parseJson = maybe invalidJson return . decode
           parseVal val = case val of
                            obj@(Object _) -> return $ Left obj
@@ -117,7 +118,7 @@ singleCall (Methods fs) val = case parsed of
                                 Right (Request name args i) ->
                                   toResponse i `liftM` runErrorT (applyMethodTo args =<< method)
                                     where method = lookupMethod name fs
-    where parsed = runIdentityResult $ parseValue val
+    where parsed = runIdentity $ runErrorT $ parseValue val
           applyMethodTo args (Method _ f) = f args
 
 nullIdResponse :: RpcError -> Maybe Response
@@ -134,9 +135,6 @@ lookupMethod name = maybe notFound return . H.lookup name
 
 invalidRpcError :: Text -> RpcError
 invalidRpcError = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
-
-runIdentityResult :: RpcResult Identity a -> Either RpcError a
-runIdentityResult = runIdentity . runErrorT
 
 batchCall :: Monad m => (forall a. [m a] -> m [a])
           -> Methods m
