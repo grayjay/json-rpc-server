@@ -24,7 +24,7 @@ import Test.Framework.Providers.HUnit
 main :: IO ()
 main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "invalid JSON RPC" testInvalidJsonRpc
-                   , testCase "empty batch call" testInvalidBatchCall
+                   , testCase "empty batch call" testEmptyBatchCall
                    , testCase "wrong version in request" testWrongVersion
                    , testCase "method not found" testMethodNotFound
                    , testCase "missing required argument" testMissingRequiredArg
@@ -42,30 +42,33 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "parallelize tasks" testParallelizingTasks ]
 
 testInvalidJson :: Assertion
-testInvalidJson = checkErrorCodeWithSubtract "5" (-32700)
+testInvalidJson = checkResponseWithSubtract "5" IdNull (-32700)
 
 testInvalidJsonRpc :: Assertion
-testInvalidJsonRpc = checkErrorCodeWithSubtract (encode $ object ["id" .= (10 :: Int)]) (-32600)
+testInvalidJsonRpc = checkResponseWithSubtract (encode $ object ["id" .= (10 :: Int)]) IdNull (-32600)
 
-testInvalidBatchCall :: Assertion
-testInvalidBatchCall = checkErrorCodeWithSubtract (encode emptyArray) (-32600)
+testEmptyBatchCall :: Assertion
+testEmptyBatchCall = checkResponseWithSubtract (encode emptyArray) IdNull (-32600)
 
 testWrongVersion :: Assertion
-testWrongVersion = checkErrorCodeWithSubtract (encode requestWrongVersion) (-32600)
+testWrongVersion = checkResponseWithSubtract (encode requestWrongVersion) IdNull (-32600)
     where requestWrongVersion = Object $ H.insert versionKey (String "1") hm
           Object hm = toJSON $ subtractRequestNamed [("a1", Number 4)] (IdNumber 10)
 
 testMethodNotFound :: Assertion
-testMethodNotFound = checkErrorCodeWithSubtract (encode request) (-32601)
-    where request = TestRequest "ad" Nothing (Just $ IdNumber 3)
+testMethodNotFound = checkResponseWithSubtract (encode request) i (-32601)
+    where request = TestRequest "ad" Nothing (Just i)
+          i = IdNumber 3
 
 testMissingRequiredArg :: Assertion
-testMissingRequiredArg = checkErrorCodeWithSubtract (encode request) (-32602)
-    where request = subtractRequestNamed [("a2", Number 20)] (IdNumber 2)
+testMissingRequiredArg = checkResponseWithSubtract (encode request) i (-32602)
+    where request = subtractRequestNamed [("a2", Number 20)] i
+          i = IdNumber 2
 
 testDisallowExtraUnnamedArg :: Assertion
-testDisallowExtraUnnamedArg = checkErrorCodeWithSubtract (encode request) (-32602)
-    where request = subtractRequestUnnamed (map Number [1, 2, 3]) (IdString "i")
+testDisallowExtraUnnamedArg = checkResponseWithSubtract (encode request) i (-32602)
+    where request = subtractRequestUnnamed (map Number [1, 2, 3]) i
+          i = IdString "i"
 
 testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
@@ -167,9 +170,11 @@ subtractRequestNamed args i = TestRequest "subtract" (Just $ Left $ H.fromList a
 subtractRequestUnnamed :: [Value] -> TestId -> TestRequest
 subtractRequestUnnamed args i = TestRequest "subtract" (Just $ Right $ V.fromList args) (Just i)
 
-checkErrorCodeWithSubtract :: B.ByteString -> Int -> Assertion
-checkErrorCodeWithSubtract val expectedCode = (getErrorCode =<< runIdentity result) @?= Just expectedCode
-    where result = call (toMethods [subtractMethod]) val
+checkResponseWithSubtract :: B.ByteString -> TestId -> Int -> Assertion
+checkResponseWithSubtract val expectedId expectedCode = actual @?= expected
+    where expected = (Just expectedId, Just expectedCode)
+          actual = (rspId <$> fromByteString result, getErrorCode result)
+          result = fromJust $ runIdentity $ call (toMethods [subtractMethod]) val
 
 fromByteString :: FromJSON a => B.ByteString -> Maybe a
 fromByteString x = case fromJSON <$> decode x of
