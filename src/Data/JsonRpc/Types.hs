@@ -61,7 +61,7 @@ applyNamed :: (FromJSON a, MethodParams f p m r)
               -> Object
               -> RpcResult m r
 applyNamed f (param :+: ps) args = arg >>= \a -> mpApplyNamed (f a) ps args
-    where arg = (lookupArg name args >>= parseArg name) <|> paramDefault param
+    where arg = either (parseArg name) return =<< (Left <$> lookupArg name args) <|> (Right <$> paramDefault param)
           name = paramName param
 
 lookupArg :: Monad m => Text -> Object -> RpcResult m Value
@@ -75,7 +75,7 @@ applyUnnamed :: (FromJSON a, MethodParams f p m r)
               -> Array
               -> RpcResult m r
 applyUnnamed f (param :+: ps) args = arg >>= \a -> mpApplyUnnamed (f a) ps (tailOrEmpty args)
-    where arg = (headArg name args >>= parseArg name) <|> paramDefault param
+    where arg = either (parseArg name) return =<< (Left <$> headArg name args) <|> (Right <$> paramDefault param)
           name = paramName param
 
 headArg :: Monad m => Text -> V.Vector a -> RpcResult m a
