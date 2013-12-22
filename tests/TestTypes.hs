@@ -9,6 +9,7 @@ module TestTypes ( TestRequest (..)
 
 import Data.Aeson
 import Data.Aeson.Types
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Data.Attoparsec.Number (Number)
 import Data.HashMap.Strict (size)
@@ -34,13 +35,10 @@ data TestRequest = TestRequest Text (Maybe (Either Object Array)) (Maybe TestId)
 
 instance ToJSON TestRequest where
     toJSON (TestRequest name params i) = object pairs
-        where pairs = [ "method" .= toJSON name
-                      , "id" .= toJSON i ] ++ ps
-              ps = case params of
-                         Nothing -> []
-                         Just (Left named) -> paramsPair named
-                         Just (Right unnamed) -> paramsPair unnamed
-                  where paramsPair v = ["params" .= toJSON v]
+        where pairs = catMaybes $ [Just $ "method" .= toJSON name, idPair, paramsPair]
+              idPair = ("id" .=) <$> i
+              paramsPair = either toPair toPair <$> params
+                  where toPair v = "params" .= toJSON v
 
 data TestResponse = TestResponse { rspId :: TestId
                                  , rspResult :: Either TestRpcError Value }
