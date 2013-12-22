@@ -35,52 +35,37 @@ data a :+: ps = (Parameter a) :+: ps
 infixr :+:
 
 apply :: MethodParams f p m r => f -> p -> Args -> RpcResult m r
-apply f p (Left hm) = mpApplyNamed f p hm
-apply f p (Right vec) = mpApplyUnnamed f p vec
+apply = mpApply
 
 -- | Relationship between a method's function ('f'), parameters ('p'),
 --   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
 class (Monad m, Functor m, ToJSON r) => MethodParams f p m r | f -> p m r where
-    mpApplyNamed :: f -> p -> Object -> RpcResult m r
-    mpApplyUnnamed :: f -> p -> Array -> RpcResult m r
+    mpApply :: f -> p -> Args -> RpcResult m r
 
 instance (Monad m, Functor m, ToJSON r) => MethodParams (RpcResult m r) () m r where
-    mpApplyNamed r _ _ = r
-    mpApplyUnnamed r _ args | V.null args = r
-                            | otherwise = throwError $ rpcError (-32602) "Too many unnamed arguments"
+    mpApply r _ args = case args of
+                         Left _ -> r
+                         Right ar | V.null ar -> r
+                                  | otherwise -> throwError $ rpcError (-32602) "Too many unnamed arguments"
 
 instance (FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
-    mpApplyNamed = applyNamed
-    mpApplyUnnamed = applyUnnamed
-
-applyNamed :: (FromJSON a, MethodParams f p m r)
-              => (a -> f)
-              -> a :+: p
-              -> Object
-              -> RpcResult m r
-applyNamed f (param :+: ps) args = arg >>= \a -> mpApplyNamed (f a) ps args
-    where arg = either (parseArg name) return =<< (Left <$> lookupArg name args) <|> (Right <$> paramDefault param)
-          name = paramName param
+    mpApply f (param :+: ps) args = arg >>= \a -> mpApply (f a) ps nextArgs
+        where arg = either (parseArg name) return =<<
+                    (Left <$> lookupValue <|> Right <$> paramDefault param)
+              lookupValue = either (lookupArg name) (headArg name) args
+              nextArgs = tailOrEmpty <$> args
+              name = paramName param
 
 lookupArg :: Monad m => Text -> Object -> RpcResult m Value
 lookupArg name hm = case H.lookup name hm of
                       Nothing -> throwError $ missingArgError name
                       Just v -> return v
 
-applyUnnamed :: (FromJSON a, MethodParams f p m r)
-              => (a -> f)
-              -> a :+: p
-              -> Array
-              -> RpcResult m r
-applyUnnamed f (param :+: ps) args = arg >>= \a -> mpApplyUnnamed (f a) ps (tailOrEmpty args)
-    where arg = either (parseArg name) return =<< (Left <$> headArg name args) <|> (Right <$> paramDefault param)
-          name = paramName param
-
 headArg :: Monad m => Text -> V.Vector a -> RpcResult m a
 headArg name vec | V.null vec = throwError $ missingArgError name
-                 | otherwise = V.headM vec
+                 | otherwise = return $ V.head vec
 
 tailOrEmpty :: V.Vector a -> V.Vector a
 tailOrEmpty vec = if V.null vec then V.empty else V.tail vec
