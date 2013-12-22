@@ -117,7 +117,7 @@ instance FromJSON Request where
                            (Request <$>
                            x .: methodKey <*>
                            (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
-                           x .:? idKey)
+                           (Just <$> x .: idKey <|> return Nothing)) -- parse Null as Just NullId, rather than Nothing
         where parseParams :: Value -> Parser Args
               parseParams val = withObject (unpack paramsKey) (return . Left) val <|>
                                 withArray (unpack paramsKey) (return . Right) val
