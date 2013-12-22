@@ -137,7 +137,7 @@ testDefaultUnnamedArg = (fromByteString =<< runIdentity response) @?= (Just $ Te
           i = IdNumber 0
 
 testNullId :: Assertion
-testNullId = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse IdNull (Right $ Number 60))
+testNullId = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse IdNull (Right $ Number (-80)))
     where response = call (toMethods [subtractMethod]) $ encode request
           request = subtractRequestNamed args IdNull
           args = [("a2", Number 70), ("a1", Number (-10))]
