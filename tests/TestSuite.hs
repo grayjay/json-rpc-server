@@ -29,7 +29,8 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "wrong version in request" testWrongVersion
                    , testCase "method not found" testMethodNotFound
                    , testCase "wrong method name capitalization" testWrongMethodNameCapitalization
-                   , testCase "missing required argument" testMissingRequiredArg
+                   , testCase "missing required named argument" testMissingRequiredNamedArg
+                   , testCase "missing required unnamed argument" testMissingRequiredUnnamedArg
                    , testCase "wrong argument type" testWrongArgType
                    , testCase "disallow extra unnamed arguments" testDisallowExtraUnnamedArg
                    , testCase "invalid notification" testNoResponseToInvalidNotification
@@ -69,10 +70,15 @@ testWrongMethodNameCapitalization = checkResponseWithSubtract (encode request) i
     where request = TestRequest "Add" Nothing (Just i)
           i = IdNull
 
-testMissingRequiredArg :: Assertion
-testMissingRequiredArg = checkResponseWithSubtract (encode request) i (-32602)
+testMissingRequiredNamedArg :: Assertion
+testMissingRequiredNamedArg = checkResponseWithSubtract (encode request) i (-32602)
     where request = subtractRequestNamed [("A1", Number 1), ("a2", Number 20)] i
           i = IdNumber 2
+
+testMissingRequiredUnnamedArg :: Assertion
+testMissingRequiredUnnamedArg = checkResponseWithSubtract (encode request) i (-32602)
+    where request = TestRequest "subtract 2" (Just $ Right $ V.fromList [Number 0]) (Just i)
+          i = IdString ""
 
 testWrongArgType :: Assertion
 testWrongArgType = checkResponseWithSubtract (encode request) i (-32602)
@@ -87,7 +93,7 @@ testDisallowExtraUnnamedArg = checkResponseWithSubtract (encode request) i (-326
 testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
     where response = call (toMethods [subtractMethod]) $ encode request
-          request = TestRequest "subtract2" Nothing Nothing
+          request = TestRequest "12345" Nothing Nothing
 
 testBatch :: Assertion
 testBatch = assert (fromJust (fromByteString =<< runIdentity response) `equalContents` expected)
@@ -189,16 +195,16 @@ compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expecte
           i = IdString "Id 1"
 
 subtractRequestNamed :: [(Text, Value)] -> TestId -> TestRequest
-subtractRequestNamed args i = TestRequest "subtract" (Just $ Left $ H.fromList args) (Just i)
+subtractRequestNamed args i = TestRequest "subtract 1" (Just $ Left $ H.fromList args) (Just i)
 
 subtractRequestUnnamed :: [Value] -> TestId -> TestRequest
-subtractRequestUnnamed args i = TestRequest "subtract" (Just $ Right $ V.fromList args) (Just i)
+subtractRequestUnnamed args i = TestRequest "subtract 1" (Just $ Right $ V.fromList args) (Just i)
 
 checkResponseWithSubtract :: B.ByteString -> TestId -> Int -> Assertion
 checkResponseWithSubtract val expectedId expectedCode = actual @?= expected
     where expected = (Just expectedId, Just expectedCode)
           actual = (rspId <$> fromByteString result, getErrorCode result)
-          result = fromJust $ runIdentity $ call (toMethods [subtractMethod]) val
+          result = fromJust $ runIdentity $ call (toMethods [subtractMethod, flippedSubtractMethod]) val
 
 fromByteString :: FromJSON a => B.ByteString -> Maybe a
 fromByteString x = case fromJSON <$> decode x of
@@ -212,9 +218,14 @@ getErrorCode b = fromByteString b >>= \r ->
                    _ -> Nothing
 
 subtractMethod :: Method Identity
-subtractMethod = toMethod "subtract" sub (Required "a1" :+: Optional "a2" 0 :+: ())
+subtractMethod = toMethod "subtract 1" sub (Required "a1" :+: Optional "a2" 0 :+: ())
             where sub :: Int -> Int -> RpcResult Identity Int
                   sub x y = return (x - y)
+
+flippedSubtractMethod :: Method Identity
+flippedSubtractMethod = toMethod "subtract 2" sub (Optional "y" (-1000) :+: Required "x" :+: ())
+            where sub :: Int -> Int -> RpcResult Identity Int
+                  sub y x = return (x - y)
 
 getTimeMethod :: Method IO
 getTimeMethod = toMethod "get_time_seconds" getTime ()
