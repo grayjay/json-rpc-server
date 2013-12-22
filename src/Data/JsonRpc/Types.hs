@@ -9,7 +9,6 @@ module Data.JsonRpc.Types where
 
 import Data.String
 import Data.Text (Text, append, unpack)
-import Data.Maybe (fromMaybe)
 import Data.Aeson
 import Data.Aeson.Types (Parser, emptyObject)
 import qualified Data.Vector as V
@@ -113,7 +112,7 @@ type Args = Either Object Array
 data Request = Request Text Args (Maybe Id)
 
 instance FromJSON Request where
-    parseJSON (Object x) = (x .:? versionKey >>= checkVersion) *>
+    parseJSON (Object x) = (x .:? versionKey .!= jsonRpcVersion >>= checkVersion) *>
                            (Request <$>
                            x .: methodKey <*>
                            (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
@@ -121,8 +120,7 @@ instance FromJSON Request where
         where parseParams :: Value -> Parser Args
               parseParams val = withObject (unpack paramsKey) (return . Left) val <|>
                                 withArray (unpack paramsKey) (return . Right) val
-              checkVersion ver = let v = fromMaybe jsonRpcVersion ver
-                                 in when (v /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack v)
+              checkVersion ver = when (ver /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack ver)
     parseJSON _ = empty
 
 data Response = Response { rspId :: Id
