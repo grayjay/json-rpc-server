@@ -178,7 +178,7 @@ parallelize :: [IO a] -> IO [a]
 parallelize tasks = do
   results <- forM tasks $ \t -> do
                       mvar <- newEmptyMVar
-                      forkIO $ putMVar mvar =<< t
+                      _ <- forkIO $ putMVar mvar =<< t
                       return mvar
   forM results takeMVar
 

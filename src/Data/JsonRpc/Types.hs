@@ -7,7 +7,7 @@
 
 module Data.JsonRpc.Types where
 
-import Data.String
+import Data.String (fromString)
 import Data.Text (Text, append, unpack)
 import Data.Aeson
 import Data.Aeson.Types (Parser, emptyObject)
@@ -34,24 +34,21 @@ data Parameter a
 data a :+: ps = (Parameter a) :+: ps
 infixr :+:
 
-apply :: MethodParams f p m r => f -> p -> Args -> RpcResult m r
-apply = mpApply
-
 -- | Relationship between a method's function ('f'), parameters ('p'),
 --   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
 class (Monad m, Functor m, ToJSON r) => MethodParams f p m r | f -> p m r where
-    mpApply :: f -> p -> Args -> RpcResult m r
+    apply :: f -> p -> Args -> RpcResult m r
 
 instance (Monad m, Functor m, ToJSON r) => MethodParams (RpcResult m r) () m r where
-    mpApply r _ args = case args of
-                         Left _ -> r
-                         Right ar | V.null ar -> r
-                                  | otherwise -> throwError $ rpcError (-32602) "Too many unnamed arguments"
+    apply r _ args = case args of
+                       Left _ -> r
+                       Right ar | V.null ar -> r
+                                | otherwise -> throwError $ rpcError (-32602) "Too many unnamed arguments"
 
 instance (FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
-    mpApply f (param :+: ps) args = arg >>= \a -> mpApply (f a) ps nextArgs
+    apply f (param :+: ps) args = arg >>= \a -> apply (f a) ps nextArgs
         where arg = either (parseArg name) return =<<
                     (Left <$> lookupValue <|> Right <$> paramDefault param)
               lookupValue = either (lookupArg name) (headArg name) args
@@ -101,7 +98,7 @@ instance FromJSON Request where
                            (Request <$>
                            x .: methodKey <*>
                            (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
-                           (Just <$> x .: idKey <|> return Nothing)) -- parse Null as Just NullId, rather than Nothing
+                           (Just <$> x .: idKey <|> return Nothing)) -- (.:?) parses Null value as Nothing
         where parseParams :: Value -> Parser Args
               parseParams val = withObject (unpack paramsKey) (return . Left) val <|>
                                 withArray (unpack paramsKey) (return . Right) val

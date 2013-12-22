@@ -35,7 +35,7 @@ data TestRequest = TestRequest Text (Maybe (Either Object Array)) (Maybe TestId)
 
 instance ToJSON TestRequest where
     toJSON (TestRequest name params i) = object pairs
-        where pairs = catMaybes $ [Just $ "method" .= toJSON name, idPair, paramsPair]
+        where pairs = catMaybes [Just $ "method" .= toJSON name, idPair, paramsPair]
               idPair = ("id" .=) <$> i
               paramsPair = either toPair toPair <$> params
                   where toPair v = "params" .= toJSON v
