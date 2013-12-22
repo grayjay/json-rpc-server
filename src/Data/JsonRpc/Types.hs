@@ -3,6 +3,7 @@
              FlexibleInstances,
              UndecidableInstances,
              TypeOperators,
+             PatternGuards,
              OverloadedStrings #-}
 
 module Data.JsonRpc.Types where
@@ -42,10 +43,9 @@ class (Monad m, Functor m, ToJSON r) => MethodParams f p m r | f -> p m r where
     apply :: f -> p -> Args -> RpcResult m r
 
 instance (Monad m, Functor m, ToJSON r) => MethodParams (RpcResult m r) () m r where
-    apply r _ args = case args of
-                       Left _ -> r
-                       Right ar | V.null ar -> r
-                                | otherwise -> throwError $ rpcError (-32602) "Too many unnamed arguments"
+    apply r _ args | Left _ <- args = r
+                   | Right ar <- args, V.null ar = r
+                   | otherwise = throwError $ rpcError (-32602) "Too many unnamed arguments"
 
 instance (FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
     apply f (param :+: ps) args = arg >>= \a -> apply (f a) ps nextArgs
@@ -105,12 +105,12 @@ instance FromJSON Request where
               checkVersion ver = when (ver /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack ver)
     parseJSON _ = empty
 
-data Response = Response { rspId :: Id
-                         , rspResult :: Either RpcError Value }
+data Response = Response Id (Either RpcError Value)
 
 instance ToJSON Response where
-    toJSON r = object [versionKey .= jsonRpcVersion, result, "id" .= toJSON (rspId r)]
-        where result = either (("error" .=) . toJSON) ("result" .=) $ rspResult r
+    toJSON (Response i result) = object pairs
+        where pairs = [versionKey .= jsonRpcVersion, resultPair, "id" .= toJSON i]
+              resultPair = either (("error" .=) . toJSON) ("result" .=) result
 
 data Id = IdString Text | IdNumber Number | IdNull
 
