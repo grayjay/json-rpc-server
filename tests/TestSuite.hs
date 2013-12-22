@@ -14,10 +14,11 @@ import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.Applicative
 import Control.Monad.Trans
+import Control.Monad.State
 import Control.Monad.Identity
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
-import Test.HUnit
+import Test.HUnit hiding (State)
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
@@ -33,6 +34,7 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "disallow extra unnamed arguments" testDisallowExtraUnnamedArg
                    , testCase "invalid notification" testNoResponseToInvalidNotification
                    , testCase "batch request" testBatch
+                   , testCase "batch notifications" testBatchNotifications
                    , testCase "allow missing version" testAllowMissingVersion
                    , testCase "no arguments" testNoArgs
                    , testCase "empty argument array" testEmptyUnnamedArgs
@@ -62,8 +64,8 @@ testMethodNotFound = checkResponseWithSubtract (encode request) i (-32601)
     where request = TestRequest "ad" Nothing (Just i)
           i = IdNumber 3
 
-testWrongMethodCapitalization :: Assertion
-testWrongMethodCapitalization = checkResponseWithSubtract (encode request) i (-32601)
+testWrongMethodNameCapitalization :: Assertion
+testWrongMethodNameCapitalization = checkResponseWithSubtract (encode request) i (-32601)
     where request = TestRequest "Add" Nothing (Just i)
           i = IdNull
 
@@ -95,6 +97,11 @@ testBatch = assert (fromJust (fromByteString =<< runIdentity response) `equalCon
           toArgs x y = [("a1", Number x), ("a2", Number y)]
           i1 = IdString "1"
           i2 = IdString "2"
+
+testBatchNotifications :: Assertion
+testBatchNotifications = runState response 0 @?= (Nothing, 10)
+    where response = call (toMethods [incrementStateMethod]) $ encode request
+          request = replicate 10 $ TestRequest "increment" Nothing Nothing
 
 testAllowMissingVersion :: Assertion
 testAllowMissingVersion = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1))
@@ -168,6 +175,11 @@ parallelize tasks = do
                       forkIO $ putMVar mvar =<< t
                       return mvar
   forM results takeMVar
+
+incrementStateMethod :: Method (State Int)
+incrementStateMethod = toMethod "increment" f ()
+    where f :: RpcResult (State Int) ()
+          f = lift $ modify (+1)
 
 compareGetTimeResult :: Maybe (Either Object Array) -> Assertion
 compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expected =<<
