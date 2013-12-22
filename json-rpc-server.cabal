@@ -66,4 +66,4 @@ test-suite tests
                        vector >=0.10 && <0.11,
                        unordered-containers >=0.2 && <0.3,
                        attoparsec >=0.10 && <0.11
-  ghc-options:         -Wall
+  ghc-options:         -Wall -fno-warn-incomplete-patterns
