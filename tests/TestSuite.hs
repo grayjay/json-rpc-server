@@ -27,7 +27,9 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "empty batch call" testEmptyBatchCall
                    , testCase "wrong version in request" testWrongVersion
                    , testCase "method not found" testMethodNotFound
+                   , testCase "wrong method name capitalization" testWrongMethodNameCapitalization
                    , testCase "missing required argument" testMissingRequiredArg
+                   , testCase "wrong argument type" testWrongArgType
                    , testCase "disallow extra unnamed arguments" testDisallowExtraUnnamedArg
                    , testCase "invalid notification" testNoResponseToInvalidNotification
                    , testCase "batch request" testBatch
@@ -60,10 +62,20 @@ testMethodNotFound = checkResponseWithSubtract (encode request) i (-32601)
     where request = TestRequest "ad" Nothing (Just i)
           i = IdNumber 3
 
+testWrongMethodCapitalization :: Assertion
+testWrongMethodCapitalization = checkResponseWithSubtract (encode request) i (-32601)
+    where request = TestRequest "Add" Nothing (Just i)
+          i = IdNull
+
 testMissingRequiredArg :: Assertion
 testMissingRequiredArg = checkResponseWithSubtract (encode request) i (-32602)
-    where request = subtractRequestNamed [("a2", Number 20)] i
+    where request = subtractRequestNamed [("A1", Number 1), ("a2", Number 20)] i
           i = IdNumber 2
+
+testWrongArgType :: Assertion
+testWrongArgType = checkResponseWithSubtract (encode request) i (-32602)
+    where request = subtractRequestNamed [("a1", Number 1), ("a2", Bool True)] i
+          i = IdString "ABC"
 
 testDisallowExtraUnnamedArg :: Assertion
 testDisallowExtraUnnamedArg = checkResponseWithSubtract (encode request) i (-32602)
