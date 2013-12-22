@@ -20,6 +20,7 @@ module Data.JsonRpc.Types ( RpcResult
                           , rpcErrorWithData) where
 
 import Data.String (fromString)
+import Data.Maybe (catMaybes)
 import Data.Text (Text, append, unpack)
 import Data.Aeson
 import Data.Aeson.Types (emptyObject)
@@ -120,8 +121,9 @@ data Response = Response Id (Either RpcError Value)
 
 instance ToJSON Response where
     toJSON (Response i result) = object pairs
-        where pairs = [versionKey .= jsonRpcVersion, resultPair, idKey .= toJSON i]
-              resultPair = either ((errorKey .=) . toJSON) (resultKey .=) result
+        where pairs = [ versionKey .= jsonRpcVersion
+                      , either (errorKey .=) (resultKey .=) result
+                      , idKey .= i]
 
 data Id = IdString Text | IdNumber Number | IdNull
 
@@ -147,8 +149,9 @@ instance Error RpcError where
 
 instance ToJSON RpcError where
     toJSON (RpcError code msg data') = object pairs
-        where pairs = [codeKey .= toJSON code, msgKey .= toJSON msg] ++ dataPair
-              dataPair = maybe [] (\d -> [dataKey .= toJSON d]) data'
+        where pairs = catMaybes [ Just $ codeKey .= code
+                                , Just $ msgKey .= msg
+                                , (dataKey .=) <$> data' ]
 
 -- | Creates an 'RpcError' with the given error code and message.
 --   According to the specification, server error codes should be
