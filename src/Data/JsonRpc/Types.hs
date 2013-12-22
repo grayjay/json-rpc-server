@@ -120,8 +120,8 @@ data Response = Response Id (Either RpcError Value)
 
 instance ToJSON Response where
     toJSON (Response i result) = object pairs
-        where pairs = [versionKey .= jsonRpcVersion, resultPair, "id" .= toJSON i]
-              resultPair = either (("error" .=) . toJSON) ("result" .=) result
+        where pairs = [versionKey .= jsonRpcVersion, resultPair, idKey .= toJSON i]
+              resultPair = either ((errorKey .=) . toJSON) (resultKey .=) result
 
 data Id = IdString Text | IdNumber Number | IdNull
 
@@ -162,26 +162,20 @@ rpcError code msg = RpcError code msg Nothing
 rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
 rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData
 
-jsonRpcVersion :: Text
+jsonRpcVersion, versionKey, idKey :: Text
 jsonRpcVersion = "2.0"
-
-versionKey :: Text
 versionKey = "jsonrpc"
+idKey = "id"
 
-codeKey :: Text
-codeKey = "code"
-
-msgKey :: Text
-msgKey = "message"
-
-dataKey :: Text
-dataKey = "data"
-
-methodKey :: Text
+methodKey, paramsKey :: Text
 methodKey = "method"
-
-paramsKey :: Text
 paramsKey = "params"
 
-idKey :: Text
-idKey = "id"
+resultKey, errorKey :: Text
+resultKey = "result"
+errorKey = "error"
+
+codeKey, msgKey, dataKey :: Text
+codeKey = "code"
+msgKey = "message"
+dataKey = "data"
