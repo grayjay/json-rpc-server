@@ -10,7 +10,7 @@ module Data.JsonRpc.Types where
 import Data.String (fromString)
 import Data.Text (Text, append, unpack)
 import Data.Aeson
-import Data.Aeson.Types (Parser, emptyObject)
+import Data.Aeson.Types (emptyObject)
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Data.Attoparsec.Number (Number)
@@ -94,14 +94,14 @@ type Args = Either Object Array
 data Request = Request Text Args (Maybe Id)
 
 instance FromJSON Request where
-    parseJSON (Object x) = (x .:? versionKey .!= jsonRpcVersion >>= checkVersion) *>
+    parseJSON (Object x) = (checkVersion =<< x .:? versionKey .!= jsonRpcVersion) *>
                            (Request <$>
                            x .: methodKey <*>
                            (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
                            (Just <$> x .: idKey <|> return Nothing)) -- (.:?) parses Null value as Nothing
-        where parseParams :: Value -> Parser Args
-              parseParams val = withObject (unpack paramsKey) (return . Left) val <|>
-                                withArray (unpack paramsKey) (return . Right) val
+        where parseParams (Object obj) = return $ Left obj
+              parseParams (Array ar) = return $ Right ar
+              parseParams _ = empty
               checkVersion ver = when (ver /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack ver)
     parseJSON _ = empty
 
