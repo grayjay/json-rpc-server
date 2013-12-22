@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import Data.JsonRpc.Server
+import Network.JsonRpc.Server
 import TestTypes
 import Data.List ((\\), sort)
 import Data.Aeson

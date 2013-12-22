@@ -6,18 +6,18 @@
              PatternGuards,
              OverloadedStrings #-}
 
-module Data.JsonRpc.Types ( RpcResult
-                          , Method (..)
-                          , Methods (..)
-                          , Parameter(..)
-                          , (:+:) (..)
-                          , MethodParams (..)
-                          , Request (..)
-                          , Response (..)
-                          , Id (..)
-                          , RpcError
-                          , rpcError
-                          , rpcErrorWithData) where
+module Network.JsonRpc.Types ( RpcResult
+                             , Method (..)
+                             , Methods (..)
+                             , Parameter(..)
+                             , (:+:) (..)
+                             , MethodParams (..)
+                             , Request (..)
+                             , Response (..)
+                             , Id (..)
+                             , RpcError
+                             , rpcError
+                             , rpcErrorWithData) where
 
 import Data.String (fromString)
 import Data.Maybe (catMaybes)

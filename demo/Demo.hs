@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import Data.JsonRpc.Server
+import Network.JsonRpc.Server
 import Happstack.Server.SimpleHTTP hiding (Method, body, result)
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe)

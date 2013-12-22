@@ -5,7 +5,7 @@
 
 -- | Functions for implementing the server side of JSON RPC 2.0.
 --   See <http://www.jsonrpc.org/specification>.
-module Data.JsonRpc.Server (
+module Network.JsonRpc.Server (
                           -- ** Instructions
                           -- $instructions
 
@@ -31,7 +31,7 @@ module Data.JsonRpc.Server (
                            , rpcError
                            , rpcErrorWithData) where
 
-import Data.JsonRpc.Types
+import Network.JsonRpc.Types
 import Data.Text (Text, append, pack)
 import Data.Maybe (catMaybes)
 import qualified Data.ByteString.Lazy as B

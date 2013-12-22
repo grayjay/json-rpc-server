@@ -14,7 +14,7 @@ description:         An implemation of the server side of JSON RPC 2.0.
                      See <http://www.jsonrpc.org/specification>. This
                      library uses 'ByteString' for input and output,
                      leaving the choice of transport up to the user.
-                     See the 'Data.JsonRpc.Server' module for an example.
+                     See the 'Network.JsonRpc.Server' module for an example.
 
 source-repository head
   type:                git
@@ -25,8 +25,8 @@ flag include-demo
   manual: True
 
 library
-  exposed-modules:     Data.JsonRpc.Server
-  other-modules:       Data.JsonRpc.Types
+  exposed-modules:     Network.JsonRpc.Server
+  other-modules:       Network.JsonRpc.Types
   build-depends:       base >=4.6 && <4.7,
                        aeson >=0.6 && <0.7,
                        bytestring >=0.10 && <0.11,
