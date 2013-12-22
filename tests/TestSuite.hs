@@ -23,7 +23,9 @@ import Test.Framework
 import Test.Framework.Providers.HUnit
 
 main :: IO ()
-main = defaultMain [ testCase "invalid JSON" testInvalidJson
+main = defaultMain [ testCase "encode error" testEncodeError
+                   , testCase "encode error with data" testEncodeErrorWithData
+                   , testCase "invalid JSON" testInvalidJson
                    , testCase "invalid JSON RPC" testInvalidJsonRpc
                    , testCase "empty batch call" testEmptyBatchCall
                    , testCase "wrong version in request" testWrongVersion
@@ -45,6 +47,17 @@ main = defaultMain [ testCase "invalid JSON" testInvalidJson
                    , testCase "use default unnamed argument" testDefaultUnnamedArg
                    , testCase "null request ID" testNullId
                    , testCase "parallelize tasks" testParallelizingTasks ]
+
+testEncodeError :: Assertion
+testEncodeError = (fromByteString $ encode $ toJSON err) @?= Just testError
+    where err = rpcError (-1) "error"
+          testError = TestRpcError (-1) "error" Nothing
+
+testEncodeErrorWithData :: Assertion
+testEncodeErrorWithData = (fromByteString $ encode $ toJSON err) @?= Just testError
+    where err = rpcErrorWithData 1 "my message" errorData
+          testError = TestRpcError 1 "my message" $ Just $ toJSON errorData
+          errorData = (['\x03BB'], True, ())
 
 testInvalidJson :: Assertion
 testInvalidJson = checkResponseWithSubtract "5" IdNull (-32700)
