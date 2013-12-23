@@ -11,6 +11,7 @@ synopsis:            JSON RPC 2.0 on the server side.
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.8
+tested-with:         GHC == 7.4.1, GHC == 7.6.3
 description:         An implemation of the server side of JSON RPC 2.0.
                      See <http://www.jsonrpc.org/specification>. This
                      library uses 'ByteString' for input and output,
