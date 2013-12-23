@@ -6,7 +6,7 @@ version:             0.1.0.0
 license:             MIT
 license-file:        LICENSE
 category:            Network, JSON
-author:              grayjay
+maintainer:          Kristen Kozak <grayjay@wordroute.com>
 synopsis:            JSON RPC 2.0 on the server side.
 build-type:          Simple
 extra-source-files:  README.md
@@ -19,13 +19,13 @@ description:         An implemation of the server side of JSON RPC 2.0.
                      See the 'Network.JsonRpc.Server' module for an example.
 
 source-repository head
-  type:                git
-  location:            https://github.com/grayjay/json-rpc-server
+  type:              git
+  location:          https://github.com/grayjay/json-rpc-server
 
 flag demo
-  description: Builds the demo Happstack JSON RPC server.
-  default: False
-  manual: True
+  description:       Builds the demo Happstack JSON RPC server.
+  default:           False
+  manual:            True
 
 library
   exposed-modules:     Network.JsonRpc.Server
