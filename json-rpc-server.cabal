@@ -40,15 +40,16 @@ library
   ghc-options:         -Wall
 
 executable demo
-  if !flag (include-demo)
-    buildable:         False
   main-is:             Demo.hs
   hs-source-dirs:      demo
-  build-depends:       base,
+  if flag (include-demo)
+    build-depends:     base,
                        json-rpc-server,
                        mtl,
                        happstack-server >=7.3 && <7.4
-  ghc-options:         -Wall
+    ghc-options:       -Wall
+  else
+    buildable:         False
 
 test-suite tests
   hs-source-dirs:      tests
