@@ -63,7 +63,7 @@ import Prelude hiding (length)
 
 -- $example
 -- Here is an example of a simple Happstack server with three methods.
--- Compile it with the build flag @include-demo@.
+-- Compile it with the build flag @demo@.
 --   
 -- > <insert Demo.hs>
 --   

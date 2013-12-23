@@ -22,7 +22,8 @@ source-repository head
   type:                git
   location:            https://github.com/grayjay/json-rpc-server
 
-flag include-demo
+flag demo
+  description: Builds the demo Happstack JSON RPC server.
   default: False
   manual: True
 
@@ -43,7 +44,7 @@ library
 executable demo
   main-is:             Demo.hs
   hs-source-dirs:      demo
-  if flag (include-demo)
+  if flag (demo)
     build-depends:     base,
                        json-rpc-server,
                        mtl,
