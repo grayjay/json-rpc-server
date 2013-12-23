@@ -169,11 +169,11 @@ testParallelizingTasks = assert $ do
                            a <- actual
                            let ids = map fromIdNumber a
                                vals = map fromResult a
-                           return $ (sort ids == [1, 2, 3]) &&
-                                    (sort vals == ["A", "B", "C"])
+                           return $ (sort ids == [1, 2]) &&
+                                    (sort vals == ["A", "B"])
     where actual = (fromJust . fromByteString . fromJust) <$> (flip (callWithBatchStrategy parallelize) input =<< methods)
-          input = encode [ lockRequest 1, lockRequest 2, unlockRequest (String "A")
-                         , unlockRequest (String "B"), unlockRequest (String "C"), lockRequest 3]
+          input = encode [ lockRequest 1, unlockRequest (String "A")
+                         , unlockRequest (String "B"), lockRequest 2]
           lockRequest i = TestRequest "lock" Nothing (Just $ IdNumber i)
           unlockRequest str = TestRequest "unlock" (Just $ Right $ V.fromList [str]) Nothing
           methods = createMethods <$> newEmptyMVar
