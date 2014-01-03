@@ -31,10 +31,10 @@ data TestRequest = TestRequest Text (Maybe (Either Object Array)) (Maybe TestId)
 
 instance ToJSON TestRequest where
     toJSON (TestRequest name params i) = object pairs
-        where pairs = catMaybes [Just $ "method" .= toJSON name, idPair, paramsPair]
+        where pairs = catMaybes [Just $ "method" .= name, idPair, paramsPair]
               idPair = ("id" .=) <$> i
               paramsPair = either toPair toPair <$> params
-                  where toPair v = "params" .= toJSON v
+                  where toPair v = "params" .= v
 
 data TestResponse = TestResponse { rspId :: TestId
                                  , rspResult :: Either TestRpcError Value }
@@ -59,8 +59,8 @@ instance FromJSON TestId where
 
 instance ToJSON TestId where
     toJSON i = case i of
-                 IdString x -> toJSON x
-                 IdNumber x -> toJSON x
+                 IdString x -> String x
+                 IdNumber x -> Number x
                  IdNull -> Null
 
 versionKey :: Text
