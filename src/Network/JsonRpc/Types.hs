@@ -135,8 +135,8 @@ instance FromJSON Id where
 
 instance ToJSON Id where
     toJSON i = case i of
-                 IdString x -> toJSON x
-                 IdNumber x -> toJSON x
+                 IdString x -> String x
+                 IdNumber x -> Number x
                  IdNull -> Null
 
 -- | Error to be returned to the client.
