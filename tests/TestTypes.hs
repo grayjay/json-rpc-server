@@ -8,13 +8,12 @@ module TestTypes ( TestRequest (..)
                  , versionKey) where
 
 import Data.Aeson
-import Data.Aeson.Types (Parser)
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Data.Attoparsec.Number (Number)
 import Data.HashMap.Strict (size)
-import Control.Applicative ((<$>), (<*>), (<|>), (*>), pure, empty)
-import Control.Monad (when)
+import Control.Applicative ((<$>), (<*>), (<|>), pure, empty)
+import Control.Monad (when, guard)
 
 data TestRpcError = TestRpcError { errCode :: Int
                                  , errMsg :: Text
@@ -42,15 +41,12 @@ data TestResponse = TestResponse { rspId :: TestId
                     deriving (Eq, Show)
 
 instance FromJSON TestResponse where
-    parseJSON (Object r) = failIf (size r /= 3) *> checkVersion *>
-                           (TestResponse <$>
-                           r .: "id" <*>
-                           ((Left <$> r .: "error") <|> (Right <$> r .: "result")))
-        where checkVersion = r .: versionKey >>= failIf . (/= jsonRpcVersion)
+    parseJSON (Object obj) = do
+      guard (size obj == 3)
+      guard . (jsonRpcVersion ==) =<< obj .: versionKey
+      TestResponse <$> obj .: "id" <*>
+        ((Left <$> obj .: "error") <|> (Right <$> obj .: "result"))
     parseJSON _ = empty
-
-failIf :: Bool -> Parser ()
-failIf b = if b then empty else pure ()
 
 data TestId = IdString Text | IdNumber Number | IdNull
               deriving (Eq, Show)
