@@ -8,12 +8,12 @@ module TestTypes ( TestRequest (..)
                  , versionKey) where
 
 import Data.Aeson
-import Data.Aeson.Types
+import Data.Aeson.Types (Parser)
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Data.Attoparsec.Number (Number)
 import Data.HashMap.Strict (size)
-import Control.Applicative
+import Control.Applicative ((<$>), (<*>), (<|>), (<*), (*>), pure, empty)
 
 data TestRpcError = TestRpcError { errCode :: Int
                                  , errMsg :: Text
