@@ -13,7 +13,8 @@ import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Data.Attoparsec.Number (Number)
 import Data.HashMap.Strict (size)
-import Control.Applicative ((<$>), (<*>), (<|>), (<*), (*>), pure, empty)
+import Control.Applicative ((<$>), (<*>), (<|>), (*>), pure, empty)
+import Control.Monad (when)
 
 data TestRpcError = TestRpcError { errCode :: Int
                                  , errMsg :: Text
@@ -21,14 +22,10 @@ data TestRpcError = TestRpcError { errCode :: Int
                     deriving (Eq, Show)
 
 instance FromJSON TestRpcError where
-    parseJSON (Object err) = (TestRpcError <$>
-                             err .: "code" <*>
-                             err .: "message" <*>
-                             err .:? "data") >>= checkKeys
-        where checkKeys e = let checkSize s = failIf $ size err /= s
-                            in pure e <* checkSize (case errData e of
-                                                        Nothing -> 2
-                                                        Just _ -> 3)
+    parseJSON (Object obj) = do
+      d <- obj .:? "data"
+      when (size obj /= maybe 2 (const 3) d) $ fail "Wrong number of keys"
+      TestRpcError <$> obj .: "code" <*> obj .: "message" <*> pure d
     parseJSON _ = empty
 
 data TestRequest = TestRequest Text (Maybe (Either Object Array)) (Maybe TestId)
