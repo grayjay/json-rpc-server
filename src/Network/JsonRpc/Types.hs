@@ -108,8 +108,8 @@ data Request = Request Text Args (Maybe Id)
 instance FromJSON Request where
     parseJSON (Object x) = (checkVersion =<< x .:? versionKey .!= jsonRpcVersion) *>
                            (Request <$>
-                           x .: methodKey <*>
-                           (parseParams =<< x .:? paramsKey .!= emptyObject) <*>
+                           x .: "method" <*>
+                           (parseParams =<< x .:? "params" .!= emptyObject) <*>
                            (Just <$> x .: idKey <|> return Nothing)) -- (.:?) parses Null value as Nothing
         where parseParams (Object obj) = return $ Left obj
               parseParams (Array ar) = return $ Right ar
@@ -122,7 +122,7 @@ data Response = Response Id (Either RpcError Value)
 instance ToJSON Response where
     toJSON (Response i result) = object pairs
         where pairs = [ versionKey .= jsonRpcVersion
-                      , either (errorKey .=) (resultKey .=) result
+                      , either ("error" .=) ("result" .=) result
                       , idKey .= i]
 
 data Id = IdString Text | IdNumber Number | IdNull
@@ -149,9 +149,9 @@ instance Error RpcError where
 
 instance ToJSON RpcError where
     toJSON (RpcError code msg data') = object pairs
-        where pairs = catMaybes [ Just $ codeKey .= code
-                                , Just $ msgKey .= msg
-                                , (dataKey .=) <$> data' ]
+        where pairs = catMaybes [ Just $ "code" .= code
+                                , Just $ "message" .= msg
+                                , ("data" .=) <$> data' ]
 
 -- | Creates an 'RpcError' with the given error code and message.
 --   According to the specification, server error codes should be
@@ -169,16 +169,3 @@ jsonRpcVersion, versionKey, idKey :: Text
 jsonRpcVersion = "2.0"
 versionKey = "jsonrpc"
 idKey = "id"
-
-methodKey, paramsKey :: Text
-methodKey = "method"
-paramsKey = "params"
-
-resultKey, errorKey :: Text
-resultKey = "result"
-errorKey = "error"
-
-codeKey, msgKey, dataKey :: Text
-codeKey = "code"
-msgKey = "message"
-dataKey = "data"

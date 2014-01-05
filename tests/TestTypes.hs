@@ -4,12 +4,11 @@ module TestTypes ( TestRequest (..)
                  , TestResponse (..)
                  , TestRpcError (..)
                  , TestId (..)
-                 , jsonRpcVersion
                  , versionKey) where
 
 import Data.Aeson
 import Data.Maybe (catMaybes)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Attoparsec.Number (Number)
 import Data.HashMap.Strict (size)
 import Control.Applicative ((<$>), (<*>), (<|>), pure, empty)
@@ -43,7 +42,7 @@ data TestResponse = TestResponse { rspId :: TestId
 instance FromJSON TestResponse where
     parseJSON (Object obj) = do
       guard (size obj == 3)
-      guard . (jsonRpcVersion ==) =<< obj .: versionKey
+      guard . (pack "2.0" ==) =<< obj .: versionKey
       TestResponse <$> obj .: "id" <*>
         ((Left <$> obj .: "error") <|> (Right <$> obj .: "result"))
     parseJSON _ = empty
@@ -65,6 +64,3 @@ instance ToJSON TestId where
 
 versionKey :: Text
 versionKey = "jsonrpc"
-
-jsonRpcVersion :: Text
-jsonRpcVersion = "2.0"
