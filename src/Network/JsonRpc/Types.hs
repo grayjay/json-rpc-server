@@ -134,10 +134,9 @@ instance FromJSON Id where
     parseJSON _ = empty
 
 instance ToJSON Id where
-    toJSON i = case i of
-                 IdString x -> String x
-                 IdNumber x -> Number x
-                 IdNull -> Null
+    toJSON (IdString x) = String x
+    toJSON (IdNumber x) = Number x
+    toJSON IdNull = Null
 
 -- | Error to be returned to the client.
 data RpcError = RpcError Int Text (Maybe Value)
