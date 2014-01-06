@@ -3,14 +3,15 @@
 module Main (main) where
 
 import Network.JsonRpc.Server
-import Happstack.Server.SimpleHTTP hiding (Method, body, result)
+import Happstack.Server.SimpleHTTP( ServerPartT, simpleHTTP, nullConf
+                                  , askRq, rqBody, unBody, toResponse)
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
 import Control.Monad (when)
 import Control.Monad.Trans (liftIO)
 import Control.Monad.Error (throwError)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
-import Control.Concurrent.MVar
+import Control.Concurrent.MVar (MVar, newMVar, readMVar, modifyMVar)
 
 main :: IO ()
 main = newMVar 0 >>= \count ->
