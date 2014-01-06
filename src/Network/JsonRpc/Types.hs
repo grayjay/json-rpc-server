@@ -22,7 +22,8 @@ module Network.JsonRpc.Types ( RpcResult
 import Data.String (fromString)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, append, unpack)
-import Data.Aeson
+import qualified Data.Aeson as A
+import Data.Aeson ((.=), (.:), (.:?), (.!=))
 import Data.Aeson.Types (emptyObject)
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
@@ -51,15 +52,15 @@ infixr :+:
 --   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
-class (Monad m, Functor m, ToJSON r) => MethodParams f p m r | f -> p m r where
+class (Monad m, Functor m, A.ToJSON r) => MethodParams f p m r | f -> p m r where
     apply :: f -> p -> Args -> RpcResult m r
 
-instance (Monad m, Functor m, ToJSON r) => MethodParams (RpcResult m r) () m r where
+instance (Monad m, Functor m, A.ToJSON r) => MethodParams (RpcResult m r) () m r where
     apply r _ args | Left _ <- args = r
                    | Right ar <- args, V.null ar = r
                    | otherwise = throwError $ rpcError (-32602) "Too many unnamed arguments"
 
-instance (FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
+instance (A.FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
     apply f (param :+: ps) args = arg >>= \a -> apply (f a) ps nextArgs
         where arg = either (parseArg name) return =<<
                     (Left <$> lookupValue <|> Right <$> paramDefault param)
@@ -67,22 +68,22 @@ instance (FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m
               nextArgs = tailOrEmpty <$> args
               name = paramName param
 
-lookupArg :: Monad m => Text -> Object -> RpcResult m Value
+lookupArg :: Monad m => Text -> A.Object -> RpcResult m A.Value
 lookupArg name hm = case H.lookup name hm of
                       Nothing -> throwError $ missingArgError name
                       Just v -> return v
 
-headArg :: Monad m => Text -> V.Vector a -> RpcResult m a
+headArg :: Monad m => Text -> A.Array -> RpcResult m A.Value
 headArg name vec | V.null vec = throwError $ missingArgError name
                  | otherwise = return $ V.head vec
 
-tailOrEmpty :: V.Vector a -> V.Vector a
+tailOrEmpty :: A.Array -> A.Array
 tailOrEmpty vec = if V.null vec then V.empty else V.tail vec
 
-parseArg :: (Monad m, FromJSON r) => Text -> Value -> RpcResult m r
-parseArg name val = case fromJSON val of
-                      Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) msg
-                      Success x -> return x
+parseArg :: (Monad m, A.FromJSON r) => Text -> A.Value -> RpcResult m r
+parseArg name val = case A.fromJSON val of
+                      A.Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) msg
+                      A.Success x -> return x
 
 paramDefault :: Monad m => Parameter a -> RpcResult m a
 paramDefault (Optional _ d) = return d
@@ -96,58 +97,58 @@ paramName (Optional n _) = n
 paramName (Required n) = n
 
 -- | Single method.
-data Method m = Method Text (Args -> RpcResult m Value)
+data Method m = Method Text (Args -> RpcResult m A.Value)
 
 -- | Multiple methods.
 newtype Methods m = Methods (H.HashMap Text (Method m))
 
-type Args = Either Object Array
+type Args = Either A.Object A.Array
 
 data Request = Request Text Args (Maybe Id)
 
-instance FromJSON Request where
-    parseJSON (Object x) = (checkVersion =<< x .:? versionKey .!= jsonRpcVersion) *>
+instance A.FromJSON Request where
+    parseJSON (A.Object x) = (checkVersion =<< x .:? versionKey .!= jsonRpcVersion) *>
                            (Request <$>
                            x .: "method" <*>
                            (parseParams =<< x .:? "params" .!= emptyObject) <*>
                            (Just <$> x .: idKey <|> return Nothing)) -- (.:?) parses Null value as Nothing
-        where parseParams (Object obj) = return $ Left obj
-              parseParams (Array ar) = return $ Right ar
+        where parseParams (A.Object obj) = return $ Left obj
+              parseParams (A.Array ar) = return $ Right ar
               parseParams _ = empty
               checkVersion ver = when (ver /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack ver)
     parseJSON _ = empty
 
-data Response = Response Id (Either RpcError Value)
+data Response = Response Id (Either RpcError A.Value)
 
-instance ToJSON Response where
-    toJSON (Response i result) = object pairs
+instance A.ToJSON Response where
+    toJSON (Response i result) = A.object pairs
         where pairs = [ versionKey .= jsonRpcVersion
                       , either ("error" .=) ("result" .=) result
                       , idKey .= i]
 
 data Id = IdString Text | IdNumber Number | IdNull
 
-instance FromJSON Id where
-    parseJSON (String x) = return $ IdString x
-    parseJSON (Number x) = return $ IdNumber x
-    parseJSON Null = return IdNull
+instance A.FromJSON Id where
+    parseJSON (A.String x) = return $ IdString x
+    parseJSON (A.Number x) = return $ IdNumber x
+    parseJSON A.Null = return IdNull
     parseJSON _ = empty
 
-instance ToJSON Id where
-    toJSON (IdString x) = String x
-    toJSON (IdNumber x) = Number x
-    toJSON IdNull = Null
+instance A.ToJSON Id where
+    toJSON (IdString x) = A.String x
+    toJSON (IdNumber x) = A.Number x
+    toJSON IdNull = A.Null
 
 -- | Error to be returned to the client.
-data RpcError = RpcError Int Text (Maybe Value)
+data RpcError = RpcError Int Text (Maybe A.Value)
               deriving Show
 
 instance Error RpcError where
     noMsg = strMsg "unknown error"
     strMsg msg = RpcError (-32000) (fromString msg) Nothing
 
-instance ToJSON RpcError where
-    toJSON (RpcError code msg data') = object pairs
+instance A.ToJSON RpcError where
+    toJSON (RpcError code msg data') = A.object pairs
         where pairs = catMaybes [ Just $ "code" .= code
                                 , Just $ "message" .= msg
                                 , ("data" .=) <$> data' ]
@@ -161,8 +162,8 @@ rpcError code msg = RpcError code msg Nothing
 
 -- | Creates an 'RpcError' with the given code, message, and additional data.
 --   See 'rpcError' for the recommended error code ranges.
-rpcErrorWithData :: ToJSON a => Int -> Text -> a -> RpcError
-rpcErrorWithData code msg errorData = RpcError code msg $ Just $ toJSON errorData
+rpcErrorWithData :: A.ToJSON a => Int -> Text -> a -> RpcError
+rpcErrorWithData code msg errorData = RpcError code msg $ Just $ A.toJSON errorData
 
 jsonRpcVersion, versionKey, idKey :: Text
 jsonRpcVersion = "2.0"

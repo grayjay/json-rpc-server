@@ -35,7 +35,7 @@ import Network.JsonRpc.Types
 import Data.Text (Text, append, pack)
 import Data.Maybe (catMaybes)
 import qualified Data.ByteString.Lazy as B
-import Data.Aeson
+import qualified Data.Aeson as A
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.Applicative ((<$>))
@@ -70,8 +70,8 @@ import Prelude hiding (length)
 
 -- | Creates a method from a name, function, and parameter descriptions.
 --   The parameter names must be unique.
-toMethod :: (MethodParams f p m r, ToJSON r, Monad m) => Text -> f -> p -> Method m
-toMethod name f params = let f' args = toJSON <$> apply f params args
+toMethod :: (MethodParams f p m r, A.ToJSON r, Monad m) => Text -> f -> p -> Method m
+toMethod name f params = let f' args = A.toJSON <$> apply f params args
                          in Method name f'
 
 -- | Creates a set of methods to be called by name. The names must be unique.
@@ -98,22 +98,22 @@ callWithBatchStrategy :: Monad m =>
                                                      --   'Nothing' in the case of a notification,
                                                      --   all wrapped in the given monad.
 callWithBatchStrategy strategy fs input = either returnErr callMethod request
-    where request :: Either RpcError (Either Value [Value])
+    where request :: Either RpcError (Either A.Value [A.Value])
           request = runIdentity $ runErrorT $ parseVal =<< parseJson input
-          parseJson = maybe invalidJson return . decode
+          parseJson = maybe invalidJson return . A.decode
           parseVal val = case val of
-                           obj@(Object _) -> return $ Left obj
-                           Array vec | V.null vec -> throwError $ invalidRpcError "Empty batch request"
+                           obj@(A.Object _) -> return $ Left obj
+                           A.Array vec | V.null vec -> throwError $ invalidRpcError "Empty batch request"
                                      | otherwise -> return $ Right $ V.toList vec
                            _ -> throwError $ invalidRpcError "Not a JSON object or array"
           callMethod rq = case rq of
                             Left val -> encodeJust `liftM` singleCall fs val
                             Right vals -> encodeJust `liftM` batchCall strategy fs vals
-              where encodeJust r = (encode . toJSON) <$> r
-          returnErr = return . Just . encode . toJSON . nullIdResponse
+              where encodeJust r = (A.encode . A.toJSON) <$> r
+          returnErr = return . Just . A.encode . A.toJSON . nullIdResponse
           invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
 
-singleCall :: Monad m => Methods m -> Value -> m (Maybe Response)
+singleCall :: Monad m => Methods m -> A.Value -> m (Maybe Response)
 singleCall (Methods fs) val = case parsed of
                                 Left err -> return $ nullIdResponse err
                                 Right (Request name args i) ->
@@ -125,10 +125,10 @@ singleCall (Methods fs) val = case parsed of
 nullIdResponse :: RpcError -> Maybe Response
 nullIdResponse err = toResponse (Just IdNull) (Left err :: Either RpcError ())
 
-parseValue :: (FromJSON a, Monad m) => Value -> RpcResult m a
-parseValue val = case fromJSON val of
-                   Error msg -> throwError $ invalidRpcError $ pack msg
-                   Success x -> return x
+parseValue :: (A.FromJSON a, Monad m) => A.Value -> RpcResult m a
+parseValue val = case A.fromJSON val of
+                   A.Error msg -> throwError $ invalidRpcError $ pack msg
+                   A.Success x -> return x
 
 lookupMethod :: Monad m => Text -> H.HashMap Text (Method m) -> RpcResult m (Method m)
 lookupMethod name = maybe notFound return . H.lookup name
@@ -139,12 +139,12 @@ invalidRpcError = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
 
 batchCall :: Monad m => (forall a. [m a] -> m [a])
           -> Methods m
-          -> [Value]
+          -> [A.Value]
           -> m (Maybe [Response])
 batchCall strategy mths vals = (noNull . catMaybes) `liftM` results
     where results = strategy $ map (singleCall mths) vals
           noNull rs = if null rs then Nothing else Just rs
 
-toResponse :: ToJSON a => Maybe Id -> Either RpcError a -> Maybe Response
-toResponse (Just i) r = Just $ Response i $ toJSON <$> r
+toResponse :: A.ToJSON a => Maybe Id -> Either RpcError a -> Maybe Response
+toResponse (Just i) r = Just $ Response i $ A.toJSON <$> r
 toResponse Nothing _ = Nothing
