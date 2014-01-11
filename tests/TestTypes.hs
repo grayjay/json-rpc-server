@@ -3,14 +3,17 @@
 module TestTypes ( TestRequest (..)
                  , TestResponse (..)
                  , TestRpcError (..)
-                 , TestId (..)
+                 , TestId
+                 , idString
+                 , idNumber
+                 , idNull
                  , versionKey) where
 
 import qualified Data.Aeson as A
 import Data.Aeson ((.=), (.:), (.:?))
 import Data.Maybe (catMaybes)
+import Data.String (IsString, fromString)
 import Data.Text (Text, pack)
-import Data.Attoparsec.Number (Number)
 import Data.HashMap.Strict (size)
 import Control.Applicative ((<$>), (<*>), (<|>), pure, empty)
 import Control.Monad (when, guard)
@@ -48,18 +51,27 @@ instance A.FromJSON TestResponse where
         ((Left <$> obj .: "error") <|> (Right <$> obj .: "result"))
     parseJSON _ = empty
 
-data TestId = IdString Text | IdNumber Number | IdNull
+data TestId = IdString A.Value | IdNumber A.Value | IdNull
               deriving (Eq, Show)
 
+idString :: String -> TestId
+idString = IdString . A.String . fromString
+
+idNumber :: Integer -> TestId
+idNumber = IdNumber . A.Number . fromInteger
+
+idNull :: TestId
+idNull = IdNull
+
 instance A.FromJSON TestId where
-    parseJSON (A.String x) = return $ IdString x
-    parseJSON (A.Number x) = return $ IdNumber x
+    parseJSON x@(A.String _) = return $ IdString x
+    parseJSON x@(A.Number _) = return $ IdNumber x
     parseJSON A.Null = return IdNull
     parseJSON _ = empty
 
 instance A.ToJSON TestId where
-    toJSON (IdString x) = A.String x
-    toJSON (IdNumber x) = A.Number x
+    toJSON (IdString x) = x
+    toJSON (IdNumber x) = x
     toJSON IdNull = A.Null
 
 versionKey :: Text

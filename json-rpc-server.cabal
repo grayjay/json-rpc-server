@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                json-rpc-server
-version:             0.1.0.0
+version:             0.1.1.0
 license:             MIT
 license-file:        LICENSE
 category:            Network, JSON
@@ -31,13 +31,12 @@ library
   exposed-modules:     Network.JsonRpc.Server
   other-modules:       Network.JsonRpc.Types
   build-depends:       base >=4.5 && <4.7,
-                       aeson >=0.6 && <0.7,
+                       aeson >=0.6 && <0.8,
                        bytestring >=0.9 && <0.11,
                        mtl >=2.1 && <2.2,
                        text >=0.11 && <0.12,
                        vector >=0.8 && <0.11,
-                       unordered-containers >=0.1 && <0.3,
-                       attoparsec >=0.8 && <0.11
+                       unordered-containers >=0.1 && <0.3
   hs-source-dirs:      src
   ghc-options:         -Wall
 
@@ -68,6 +67,5 @@ test-suite tests
                        mtl,
                        text,
                        vector,
-                       unordered-containers,
-                       attoparsec
+                       unordered-containers
   ghc-options:         -Wall -fno-warn-incomplete-patterns

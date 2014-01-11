@@ -27,7 +27,6 @@ import Data.Aeson ((.=), (.:), (.:?), (.!=))
 import Data.Aeson.Types (emptyObject)
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
-import Data.Attoparsec.Number (Number)
 import Control.Applicative ((<$>), (<*>), (<|>), (*>), empty)
 import Control.Monad (when)
 import Control.Monad.Error (Error, ErrorT, throwError, strMsg, noMsg)
@@ -126,17 +125,17 @@ instance A.ToJSON Response where
                       , either ("error" .=) ("result" .=) result
                       , idKey .= i]
 
-data Id = IdString Text | IdNumber Number | IdNull
+data Id = IdString A.Value | IdNumber A.Value | IdNull
 
 instance A.FromJSON Id where
-    parseJSON (A.String x) = return $ IdString x
-    parseJSON (A.Number x) = return $ IdNumber x
+    parseJSON x@(A.String _) = return $ IdString x
+    parseJSON x@(A.Number _) = return $ IdNumber x
     parseJSON A.Null = return IdNull
     parseJSON _ = empty
 
 instance A.ToJSON Id where
-    toJSON (IdString x) = A.String x
-    toJSON (IdNumber x) = A.Number x
+    toJSON (IdString x) = x
+    toJSON (IdNumber x) = x
     toJSON IdNull = A.Null
 
 -- | Error to be returned to the client.
