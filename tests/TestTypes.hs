@@ -51,6 +51,8 @@ instance A.FromJSON TestResponse where
         ((Left <$> obj .: "error") <|> (Right <$> obj .: "result"))
     parseJSON _ = empty
 
+-- IdNumber cannot directly reference the type stored in A.Number,
+-- since it changes between aeson-0.6 and 0.7.
 data TestId = IdString A.Value | IdNumber A.Value | IdNull
               deriving (Eq, Show)
 

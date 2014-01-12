@@ -125,6 +125,8 @@ instance A.ToJSON Response where
                       , either ("error" .=) ("result" .=) result
                       , idKey .= i]
 
+-- IdNumber cannot directly reference the type stored in A.Number,
+-- since it changes between aeson-0.6 and 0.7.
 data Id = IdString A.Value | IdNumber A.Value | IdNull
 
 instance A.FromJSON Id where
