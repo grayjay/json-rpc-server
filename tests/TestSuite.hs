@@ -49,15 +49,15 @@ main = defaultMain [ testCase "encode error" testEncodeError
                    , testCase "parallelize tasks" testParallelizingTasks ]
 
 testEncodeError :: Assertion
-testEncodeError = (fromByteString $ encode $ toJSON err) @?= Just testError
+testEncodeError = fromByteString (encode $ toJSON err) @?= Just testError
     where err = rpcError (-1) "error"
           testError = TestRpcError (-1) "error" Nothing
 
 testEncodeErrorWithData :: Assertion
-testEncodeErrorWithData = (fromByteString $ encode $ toJSON err) @?= Just testError
+testEncodeErrorWithData = fromByteString (encode $ toJSON err) @?= Just testError
     where err = rpcErrorWithData 1 "my message" errorData
           testError = TestRpcError 1 "my message" $ Just $ toJSON errorData
-          errorData = (['\x03BB'], True, ())
+          errorData = ('\x03BB', [True], ())
 
 testInvalidJson :: Assertion
 testInvalidJson = checkResponseWithSubtract "5" idNull (-32700)
@@ -169,8 +169,8 @@ testParallelizingTasks = assert $ do
                            a <- actual
                            let ids = map rspId a
                                vals = map fromResult a
-                           return $ (equalContents ids $ map idNumber [1, 2]) &&
-                                    (equalContents vals ["A", "B"])
+                           return $ equalContents ids (map idNumber [1, 2]) &&
+                                    equalContents vals ["A", "B"]
     where actual = (fromJust . fromByteString . fromJust) <$> (flip (callWithBatchStrategy parallelize) input =<< methods)
           input = encode [ lockRequest 1, unlockRequest (String "A")
                          , unlockRequest (String "B"), lockRequest 2]
