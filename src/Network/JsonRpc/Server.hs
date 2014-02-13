@@ -42,7 +42,6 @@ import Control.Applicative ((<$>))
 import Control.Monad (liftM)
 import Control.Monad.Identity (Identity, runIdentity)
 import Control.Monad.Error (ErrorT, runErrorT, throwError)
-import Prelude hiding (length)
 
 -- $instructions
 -- * Create methods by calling 'toMethod' and providing the method
