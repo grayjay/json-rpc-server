@@ -23,7 +23,7 @@ import Test.Framework
 import Test.Framework.Providers.HUnit
 
 main :: IO ()
-main = defaultMain [ testCase "encode error" testEncodeError
+main = defaultMain [ testCase "encode RPC error" testEncodeRpcError
                    , testCase "encode error with data" testEncodeErrorWithData
                    , testCase "invalid JSON" testInvalidJson
                    , testCase "invalid JSON RPC" testInvalidJsonRpc
@@ -47,14 +47,14 @@ main = defaultMain [ testCase "encode error" testEncodeError
                    , testCase "use default unnamed argument" testDefaultUnnamedArg
                    , testCase "null request ID" testNullId
                    , testCase "parallelize tasks" testParallelizingTasks ]
-
-testEncodeError :: Assertion
-testEncodeError = fromByteString (encode $ toJSON err) @?= Just testError
+                   
+testEncodeRpcError :: Assertion
+testEncodeRpcError = fromByteString (toByteString err) @?= Just testError
     where err = rpcError (-1) "error"
           testError = TestRpcError (-1) "error" Nothing
 
 testEncodeErrorWithData :: Assertion
-testEncodeErrorWithData = fromByteString (encode $ toJSON err) @?= Just testError
+testEncodeErrorWithData = fromByteString (toByteString err) @?= Just testError
     where err = rpcErrorWithData 1 "my message" errorData
           testError = TestRpcError 1 "my message" $ Just $ toJSON errorData
           errorData = ('\x03BB', [True], ())
@@ -164,36 +164,6 @@ testEmptyUnnamedArgs = compareGetTimeResult $ Just $ Right empty
 testEmptyNamedArgs :: Assertion
 testEmptyNamedArgs = compareGetTimeResult $ Just $ Left H.empty
 
-testParallelizingTasks :: Assertion
-testParallelizingTasks = assert $ do
-                           a <- actual
-                           let ids = map rspId a
-                               vals = map fromResult a
-                           return $ equalContents ids (map idNumber [1, 2]) &&
-                                    equalContents vals ["A", "B"]
-    where actual = (fromJust . fromByteString . fromJust) <$> (flip (callWithBatchStrategy parallelize) input =<< methods)
-          input = encode [ lockRequest 1, unlockRequest (String "A")
-                         , unlockRequest (String "B"), lockRequest 2]
-          lockRequest i = TestRequest "lock" Nothing (Just $ idNumber i)
-          unlockRequest str = TestRequest "unlock" (Just $ Right $ V.fromList [str]) Nothing
-          methods = createMethods <$> newEmptyMVar
-          createMethods lock = toMethods [lockMethod lock, unlockMethod lock]
-          lockMethod lock = toMethod "lock" f ()
-              where f :: RpcResult IO String
-                    f = liftIO $ takeMVar lock
-          unlockMethod lock = toMethod "unlock" f (Required "value" :+: ())
-              where f :: String -> RpcResult IO ()
-                    f val = liftIO $ putMVar lock val
-          fromResult r | Right (String str) <- rspResult r = str
-
-parallelize :: [IO a] -> IO [a]
-parallelize tasks = do
-  results <- forM tasks $ \t -> do
-                      mvar <- newEmptyMVar
-                      _ <- forkIO $ putMVar mvar =<< t
-                      return mvar
-  forM results takeMVar
-
 incrementStateMethod :: Method (State Int)
 incrementStateMethod = toMethod "increment" f ()
     where f :: RpcResult (State Int) ()
@@ -213,21 +183,24 @@ subtractRequestUnnamed :: [Value] -> TestId -> TestRequest
 subtractRequestUnnamed args i = TestRequest "subtract 1" (Just $ Right $ V.fromList args) (Just i)
 
 checkResponseWithSubtract :: B.ByteString -> TestId -> Int -> Assertion
-checkResponseWithSubtract val expectedId expectedCode = actual @?= expected
-    where expected = (Just expectedId, Just expectedCode)
-          actual = (rspId <$> fromByteString result, getErrorCode result)
-          result = fromJust $ runIdentity $ call (toMethods [subtractMethod, flippedSubtractMethod]) val
+checkResponseWithSubtract input expectedId expectedCode = do
+  rspId <$> res2 @?= Just expectedId
+  (getErrorCode =<< res2) @?= Just expectedCode
+      where res1 :: Identity (Maybe B.ByteString)
+            res1 = call (toMethods [subtractMethod, flippedSubtractMethod]) input
+            res2 = fromByteString =<< runIdentity res1
 
 fromByteString :: FromJSON a => B.ByteString -> Maybe a
-fromByteString x = case fromJSON <$> decode x of
-                     Just (Success x') -> Just x'
+fromByteString str = case fromJSON <$> decode str of
+                     Just (Success x) -> Just x
                      _ -> Nothing
 
-getErrorCode :: B.ByteString -> Maybe Int
-getErrorCode b = fromByteString b >>= \r ->
-                 case r of
-                   Just (TestResponse _ (Left (TestRpcError code _ _))) -> Just code
-                   _ -> Nothing
+toByteString :: ToJSON a => a -> B.ByteString
+toByteString = encode . toJSON
+
+getErrorCode :: TestResponse -> Maybe Int
+getErrorCode (TestResponse _ (Left (TestRpcError code _ _))) = Just code
+getErrorCode _ = Nothing
 
 subtractMethod :: Method Identity
 subtractMethod = toMethod "subtract 1" sub (Required "a1" :+: Optional "a2" 0 :+: ())
@@ -246,6 +219,33 @@ getTimeMethod = toMethod "get_time_seconds" getTime ()
 
 getTestTime :: IO Integer
 getTestTime = return 100
+
+testParallelizingTasks :: Assertion
+testParallelizingTasks = do
+  a <- actual
+  assert $ equalContents (map rspId a) (map idNumber [1, 2, 3])
+  assert $ equalContents (map fromResult a) ["A", "B", "C"]
+    where actual = (fromJust . fromByteString . fromJust) <$> (flip (callWithBatchStrategy parallelize) input =<< methods)
+          input = encode [ lockRequest 1, lockRequest 3, unlockRequest (String "A")
+                         , unlockRequest (String "B"), lockRequest 2, unlockRequest (String "C")]
+          lockRequest i = TestRequest "lock" Nothing (Just $ idNumber i)
+          unlockRequest str = TestRequest "unlock" (Just $ Right $ V.fromList [str]) Nothing
+          methods = createMethods <$> newEmptyMVar
+          createMethods lock = toMethods [lockMethod lock, unlockMethod lock]
+          lockMethod lock = toMethod "lock" f ()
+              where f :: RpcResult IO String
+                    f = liftIO $ takeMVar lock
+          unlockMethod lock = toMethod "unlock" f (Required "value" :+: ())
+              where f :: String -> RpcResult IO ()
+                    f val = liftIO $ putMVar lock val
+          fromResult r | Right (String str) <- rspResult r = str
+
+parallelize :: [IO a] -> IO [a]
+parallelize tasks = mapM takeMVar =<< mapM fork tasks
+      where fork t = do
+                      mvar <- newEmptyMVar
+                      _ <- forkIO $ putMVar mvar =<< t
+                      return mvar
 
 equalContents :: Eq a => [a] -> [a] -> Bool
 equalContents xs ys = null (xs \\ ys) &&
