@@ -27,6 +27,7 @@ main = defaultMain [ testCase "encode RPC error" testEncodeRpcError
                    , testCase "invalid JSON" testInvalidJson
                    , testCase "invalid JSON RPC" testInvalidJsonRpc
                    , testCase "empty batch call" testEmptyBatchCall
+                   , testCase "invalid batch element" testInvalidBatchElement
                    , testCase "wrong version in request" testWrongVersion
                    , testCase "method not found" testMethodNotFound
                    , testCase "wrong method name capitalization" testWrongMethodNameCapitalization
@@ -53,19 +54,35 @@ testEncodeRpcError = fromByteString (encode err) @?= Just testError
           testError = TestRpcError (-1) "error" Nothing
 
 testEncodeErrorWithData :: Assertion
-testEncodeErrorWithData = fromByteString (toByteString err) @?= Just testError
+testEncodeErrorWithData = fromByteString (encode err) @?= Just testError
     where err = rpcErrorWithData 1 "my message" errorData
           testError = TestRpcError 1 "my message" $ Just $ toJSON errorData
           errorData = ('\x03BB', [True], ())
 
 testInvalidJson :: Assertion
-testInvalidJson = checkResponseWithSubtract "5" idNull (-32700)
+testInvalidJson = do
+  (rspToErrCode =<< rsp) @?= Just (-32700)
+  rspId <$> rsp @?= Just idNull
+      where rsp = callSubtractMethods ("5" :: String)
 
 testInvalidJsonRpc :: Assertion
-testInvalidJsonRpc = checkResponseWithSubtract (encode $ object ["id" .= (10 :: Int)]) idNull (-32600)
+testInvalidJsonRpc = do
+  (rspToErrCode =<< rsp) @?= Just (-32600)
+  rspId <$> rsp @?= Just idNull
+      where rsp = callSubtractMethods $ object ["id" .= (10 :: Int)]
 
 testEmptyBatchCall :: Assertion
-testEmptyBatchCall = checkResponseWithSubtract (encode emptyArray) idNull (-32600)
+testEmptyBatchCall = do
+  (rspToErrCode =<< rsp) @?= Just (-32600)
+  rspId <$> rsp @?= Just idNull
+      where rsp = callSubtractMethods emptyArray
+
+testInvalidBatchElement :: Assertion
+testInvalidBatchElement = do
+  length <$> rsp @?= Just 1
+  (rspToErrCode . head =<< rsp) @?= Just (-32600)
+  rspId . head <$> rsp @?= Just idNull
+      where rsp = callSubtractMethods [True]
 
 testWrongVersion :: Assertion
 testWrongVersion = checkResponseWithSubtract (encode requestWrongVersion) idNull (-32600)
@@ -73,14 +90,12 @@ testWrongVersion = checkResponseWithSubtract (encode requestWrongVersion) idNull
           Object hm = toJSON $ subtractRequestNamed [("a1", Number 4)] (idNumber 10)
 
 testMethodNotFound :: Assertion
-testMethodNotFound = checkResponseWithSubtract (encode request) i (-32601)
-    where request = TestRequest "ad" (Just [Number 1, Number 2]) (Just i)
-          i = idNumber 3
+testMethodNotFound = (rspToErrCode =<< callSubtractMethods req) @?= Just (-32601)
+    where req = TestRequest "ad" (Just [1, 2 :: Int]) (Just defaultId)
 
 testWrongMethodNameCapitalization :: Assertion
-testWrongMethodNameCapitalization = checkResponseWithSubtract (encode request) i (-32601)
-    where request = TestRequest "Add" (Just [Number 1, Number 2]) (Just i)
-          i = idNull
+testWrongMethodNameCapitalization = (rspToErrCode =<< callSubtractMethods req) @?= Just (-32601)
+    where req = TestRequest "Add" (Just [Number 1, Number 2]) (Just defaultId)
 
 testMissingRequiredNamedArg :: Assertion
 testMissingRequiredNamedArg = checkResponseWithSubtract (encode request) i (-32602)
@@ -182,6 +197,12 @@ subtractRequestNamed args i = TestRequest "subtract 1" (Just $ H.fromList args) 
 subtractRequestUnnamed :: [Value] -> TestId -> TestRequest
 subtractRequestUnnamed args i = TestRequest "subtract 1" (Just args) (Just i)
 
+callSubtractMethods :: (ToJSON a, FromJSON b) => a -> Maybe b
+callSubtractMethods req = let methods :: Methods Identity
+                              methods = toMethods [subtractMethod, flippedSubtractMethod]
+                              rsp = call methods $ encode req
+                          in fromByteString =<< runIdentity rsp
+
 checkResponseWithSubtract :: B.ByteString -> TestId -> Int -> Assertion
 checkResponseWithSubtract input expectedId expectedCode = do
   rspId <$> res2 @?= Just expectedId
@@ -194,9 +215,6 @@ fromByteString :: FromJSON a => B.ByteString -> Maybe a
 fromByteString str = case fromJSON <$> decode str of
                      Just (Success x) -> Just x
                      _ -> Nothing
-
-toByteString :: ToJSON a => a -> B.ByteString
-toByteString = encode . toJSON
 
 getErrorCode :: TestResponse -> Maybe Int
 getErrorCode (TestResponse _ (Left (TestRpcError code _ _))) = Just code
@@ -219,3 +237,10 @@ getTimeMethod = toMethod "get_time_seconds" getTime ()
 
 getTestTime :: IO Integer
 getTestTime = return 100
+
+rspToErrCode :: TestResponse -> Maybe Int
+rspToErrCode (TestResponse _ (Left (TestRpcError code _ _))) = Just code
+rspToErrCode _ = Nothing
+
+defaultId :: TestId
+defaultId = idNumber 3

@@ -8,24 +8,23 @@ import Data.List (sort)
 import qualified Data.Aeson as A
 import Data.Maybe (fromJust)
 import qualified Data.HashMap.Strict as H
-import qualified Data.ByteString.Lazy.Char8 as B
 import Control.Applicative ((<$>))
 import Control.Monad.Trans (liftIO)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, takeMVar)
 import Test.HUnit ((@?=), Assertion)
 
--- | Tests sending a batch request where each request either
+-- | Tests parallelizing a batch request.  Each request either
 --   locks or unlocks an MVar.  The MVar is initially locked,
---   so the first lock request would not succeed if the
---   requests were serialized.
+--   so the first lock request cannot succeed if the requests
+--   are serialized.
 testParallelizingTasks :: Assertion
 testParallelizingTasks = do
   methods <- createMethods <$> newEmptyMVar
   output <- callWithBatchStrategy parallelize methods input
-  let result = fromJust $ fromByteString =<< output
-  sort (map rspToIntId result) @?= map Just [1..3] 
-  sort (map rspToCharVal result) @?= map Just "ABC"
+  let rsp = fromJust $ fromJson =<< A.decode =<< output
+  sort (map rspToIntId rsp) @?= map Just [1..3]
+  sort (map rspToCharResult rsp) @?= map Just "ABC"
     where input = A.encode [ lockRequest 1
                            , lockRequest 3
                            , unlockRequest 'C'
@@ -37,9 +36,9 @@ testParallelizingTasks = do
 rspToIntId :: TestResponse -> Maybe Int
 rspToIntId = fromNumId . rspId
 
-rspToCharVal :: TestResponse -> Maybe Char
-rspToCharVal resp = let (Right r) = rspResult resp
-                    in fromJust $ fromJson r
+rspToCharResult :: TestResponse -> Maybe Char
+rspToCharResult rsp = let (Right r) = rspResult rsp
+                      in fromJust $ fromJson r
 
 lockRequest :: Int -> TestRequest
 lockRequest i = TestRequest "lock" (Nothing :: Maybe ()) (Just $ idNumber i)
@@ -63,8 +62,3 @@ parallelize tasks = mapM takeMVar =<< mapM fork tasks
                       mvar <- newEmptyMVar
                       _ <- forkIO $ putMVar mvar =<< t
                       return mvar
-
-fromByteString :: A.FromJSON a => B.ByteString -> Maybe a
-fromByteString str = case A.fromJSON <$> A.decode str of
-                     Just (A.Success x) -> Just x
-                     _ -> Nothing
