@@ -1,23 +1,22 @@
-{-# LANGUAGE OverloadedStrings, PatternGuards #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main (main) where
 
 import Network.JsonRpc.Server
 import TestTypes
-import Data.List ((\\))
+import qualified TestParallelism as P
+import Data.Maybe
+import Data.List (sortBy)
+import Data.Function (on)
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Text (Text)
-import Data.Maybe
 import qualified Data.ByteString.Lazy.Char8 as B
-import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.State
 import Control.Monad.Identity
-import Control.Concurrent (forkIO)
-import Control.Concurrent.MVar
 import Test.HUnit hiding (State)
 import Test.Framework
 import Test.Framework.Providers.HUnit
@@ -46,10 +45,10 @@ main = defaultMain [ testCase "encode RPC error" testEncodeRpcError
                    , testCase "use default named argument" testDefaultNamedArg
                    , testCase "use default unnamed argument" testDefaultUnnamedArg
                    , testCase "null request ID" testNullId
-                   , testCase "parallelize tasks" testParallelizingTasks ]
+                   , testCase "parallelize tasks" P.testParallelizingTasks ]
                    
 testEncodeRpcError :: Assertion
-testEncodeRpcError = fromByteString (toByteString err) @?= Just testError
+testEncodeRpcError = fromByteString (encode err) @?= Just testError
     where err = rpcError (-1) "error"
           testError = TestRpcError (-1) "error" Nothing
 
@@ -75,12 +74,12 @@ testWrongVersion = checkResponseWithSubtract (encode requestWrongVersion) idNull
 
 testMethodNotFound :: Assertion
 testMethodNotFound = checkResponseWithSubtract (encode request) i (-32601)
-    where request = TestRequest "ad" Nothing (Just i)
+    where request = TestRequest "ad" (Just [Number 1, Number 2]) (Just i)
           i = idNumber 3
 
 testWrongMethodNameCapitalization :: Assertion
 testWrongMethodNameCapitalization = checkResponseWithSubtract (encode request) i (-32601)
-    where request = TestRequest "Add" Nothing (Just i)
+    where request = TestRequest "Add" (Just [Number 1, Number 2]) (Just i)
           i = idNull
 
 testMissingRequiredNamedArg :: Assertion
@@ -90,7 +89,7 @@ testMissingRequiredNamedArg = checkResponseWithSubtract (encode request) i (-326
 
 testMissingRequiredUnnamedArg :: Assertion
 testMissingRequiredUnnamedArg = checkResponseWithSubtract (encode request) i (-32602)
-    where request = TestRequest "subtract 2" (Just $ Right $ V.fromList [Number 0]) (Just i)
+    where request = TestRequest "subtract 2" (Just [Number 0]) (Just i)
           i = idString ""
 
 testWrongArgType :: Assertion
@@ -106,21 +105,22 @@ testDisallowExtraUnnamedArg = checkResponseWithSubtract (encode request) i (-326
 testNoResponseToInvalidNotification :: Assertion
 testNoResponseToInvalidNotification = runIdentity response @?= Nothing
     where response = call (toMethods [subtractMethod]) $ encode request
-          request = TestRequest "12345" Nothing Nothing
+          request = TestRequest "12345" (Nothing :: Maybe ()) Nothing
 
 testBatch :: Assertion
-testBatch = assert (fromJust (fromByteString =<< runIdentity response) `equalContents` expected)
-    where expected = [TestResponse i1 (Right $ Number 2), TestResponse i2 (Right $ Number 4)]
-          response = call (toMethods [subtractMethod]) $ encode request
-          request = [subtractRequestNamed (toArgs 10 8) i1, subtractRequestNamed (toArgs 24 20) i2]
-          toArgs x y = [("a1", Number x), ("a2", Number y)]
-          i1 = idString "1"
-          i2 = idString "2"
+testBatch = sortBy (compare `on` fromIntId) (fromJust (fromByteString =<< runIdentity response)) @?= expected
+       where expected = [TestResponse i1 (Right $ Number 2), TestResponse i2 (Right $ Number 4)]
+             response = call (toMethods [subtractMethod]) $ encode request
+             request = [subtractRequestNamed (toArgs 10 8) i1, subtractRequestNamed (toArgs 24 20) i2]
+             toArgs x y = [("a1", Number x), ("a2", Number y)]
+             i1 = idNumber 1
+             i2 = idNumber 2
+             fromIntId rsp = (fromNumId $ rspId rsp) :: Maybe Int
 
 testBatchNotifications :: Assertion
 testBatchNotifications = runState response 0 @?= (Nothing, 10)
     where response = call (toMethods [incrementStateMethod]) $ encode request
-          request = replicate 10 $ TestRequest "increment" Nothing Nothing
+          request = replicate 10 $ TestRequest "increment" (Nothing :: Maybe ()) Nothing
 
 testAllowMissingVersion :: Assertion
 testAllowMissingVersion = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1))
@@ -177,10 +177,10 @@ compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expecte
           i = idString "Id 1"
 
 subtractRequestNamed :: [(Text, Value)] -> TestId -> TestRequest
-subtractRequestNamed args i = TestRequest "subtract 1" (Just $ Left $ H.fromList args) (Just i)
+subtractRequestNamed args i = TestRequest "subtract 1" (Just $ H.fromList args) (Just i)
 
 subtractRequestUnnamed :: [Value] -> TestId -> TestRequest
-subtractRequestUnnamed args i = TestRequest "subtract 1" (Just $ Right $ V.fromList args) (Just i)
+subtractRequestUnnamed args i = TestRequest "subtract 1" (Just args) (Just i)
 
 checkResponseWithSubtract :: B.ByteString -> TestId -> Int -> Assertion
 checkResponseWithSubtract input expectedId expectedCode = do
@@ -219,34 +219,3 @@ getTimeMethod = toMethod "get_time_seconds" getTime ()
 
 getTestTime :: IO Integer
 getTestTime = return 100
-
-testParallelizingTasks :: Assertion
-testParallelizingTasks = do
-  a <- actual
-  assert $ equalContents (map rspId a) (map idNumber [1, 2, 3])
-  assert $ equalContents (map fromResult a) ["A", "B", "C"]
-    where actual = (fromJust . fromByteString . fromJust) <$> (flip (callWithBatchStrategy parallelize) input =<< methods)
-          input = encode [ lockRequest 1, lockRequest 3, unlockRequest (String "A")
-                         , unlockRequest (String "B"), lockRequest 2, unlockRequest (String "C")]
-          lockRequest i = TestRequest "lock" Nothing (Just $ idNumber i)
-          unlockRequest str = TestRequest "unlock" (Just $ Right $ V.fromList [str]) Nothing
-          methods = createMethods <$> newEmptyMVar
-          createMethods lock = toMethods [lockMethod lock, unlockMethod lock]
-          lockMethod lock = toMethod "lock" f ()
-              where f :: RpcResult IO String
-                    f = liftIO $ takeMVar lock
-          unlockMethod lock = toMethod "unlock" f (Required "value" :+: ())
-              where f :: String -> RpcResult IO ()
-                    f val = liftIO $ putMVar lock val
-          fromResult r | Right (String str) <- rspResult r = str
-
-parallelize :: [IO a] -> IO [a]
-parallelize tasks = mapM takeMVar =<< mapM fork tasks
-      where fork t = do
-                      mvar <- newEmptyMVar
-                      _ <- forkIO $ putMVar mvar =<< t
-                      return mvar
-
-equalContents :: Eq a => [a] -> [a] -> Bool
-equalContents xs ys = null (xs \\ ys) &&
-                      null (ys \\ xs)

@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings,
+             ExistentialQuantification #-}
 
 module TestTypes ( TestRequest (..)
                  , TestResponse (..)
@@ -7,6 +8,8 @@ module TestTypes ( TestRequest (..)
                  , idString
                  , idNumber
                  , idNull
+                 , fromNumId
+                 , fromJson
                  , versionKey) where
 
 import qualified Data.Aeson as A
@@ -30,14 +33,13 @@ instance A.FromJSON TestRpcError where
       TestRpcError <$> obj .: "code" <*> obj .: "message" <*> pure d
     parseJSON _ = empty
 
-data TestRequest = TestRequest Text (Maybe (Either A.Object A.Array)) (Maybe TestId)
+data TestRequest = forall a. A.ToJSON a => TestRequest Text (Maybe a) (Maybe TestId)
 
 instance A.ToJSON TestRequest where
     toJSON (TestRequest name params i) = A.object pairs
         where pairs = catMaybes [Just $ "method" .= name, idPair, paramsPair]
               idPair = ("id" .=) <$> i
-              paramsPair = either toPair toPair <$> params
-                  where toPair v = "params" .= v
+              paramsPair = ("params" .=) <$> params
 
 data TestResponse = TestResponse { rspId :: TestId
                                  , rspResult :: Either TestRpcError A.Value }
@@ -59,11 +61,19 @@ data TestId = IdString A.Value | IdNumber A.Value | IdNull
 idString :: String -> TestId
 idString = IdString . A.String . fromString
 
-idNumber :: Integer -> TestId
-idNumber = IdNumber . A.Number . fromInteger
+idNumber :: Int -> TestId
+idNumber = IdNumber . A.Number . fromInteger . toInteger
 
 idNull :: TestId
 idNull = IdNull
+
+fromNumId :: A.FromJSON a => TestId -> Maybe a
+fromNumId (IdNumber v) = fromJson v
+
+fromJson :: A.FromJSON a => A.Value -> Maybe a
+fromJson v = case A.fromJSON v of
+               A.Success x -> Just x
+               _ -> Nothing
 
 instance A.FromJSON TestId where
     parseJSON x@(A.String _) = return $ IdString x
