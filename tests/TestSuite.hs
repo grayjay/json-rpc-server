@@ -63,19 +63,34 @@ main = defaultMain [ testCase "encode RPC error" testEncodeRpcError
                          rsp = errResponse nonNullId (-32602)
                      in testCase "disallow extra unnamed arguments" $ assertSubtractResponse req rsp
 
-                   , testCase "invalid notification" testNoResponseToInvalidNotification
+                   , let req = TestRequest "12345" (Nothing :: Maybe ()) Nothing
+                     in testCase "invalid notification" $ callSubtractMethods req @?= (Nothing :: Maybe Value)
+
                    , testCase "batch request" testBatch
                    , testCase "batch notifications" testBatchNotifications
                    , testCase "allow missing version" testAllowMissingVersion
                    , testCase "no arguments" testNoArgs
                    , testCase "empty argument array" testEmptyUnnamedArgs
                    , testCase "empty argument object" testEmptyNamedArgs
-                   , testCase "allow extra named argument" testAllowExtraNamedArg
-                   , testCase "use default named argument" testDefaultNamedArg
-                   , testCase "use default unnamed argument" testDefaultUnnamedArg
-                   , testCase "null request ID" testNullId
+
+                   , let req = subtractRequestNamed [("x", Number 10), ("y", Number 20), ("z", String "extra")] nonNullId
+                         rsp = TestResponse nonNullId $ Right $ Number (-10)
+                     in testCase "allow extra named argument" $ assertSubtractResponse req rsp
+
+                   , let req = subtractRequestNamed [("x1", Number 500), ("x", Number 1000)] nonNullId
+                         rsp = TestResponse nonNullId (Right $ Number 1000)
+                     in testCase "use default named argument" $ assertSubtractResponse req rsp
+
+                   , let req = subtractRequestUnnamed [Number 4] nonNullId
+                         rsp = TestResponse nonNullId (Right $ Number 4)
+                     in testCase "use default unnamed argument" $ assertSubtractResponse req rsp
+
+                   , let req = subtractRequestNamed [("y", Number 70), ("x", Number (-10))] idNull
+                         rsp = TestResponse idNull (Right $ Number (-80))
+                     in testCase "null request ID" $ assertSubtractResponse req rsp
+
                    , testCase "parallelize tasks" P.testParallelizingTasks ]
-                   
+
 testEncodeRpcError :: Assertion
 testEncodeRpcError = fromByteString (encode err) @?= Just testError
     where err = rpcError (-1) "error"
@@ -100,11 +115,6 @@ testWrongVersion = removeErrMsg <$> rsp @?= Just (errResponse idNull (-32600))
     where rsp = callSubtractMethods $ Object $ H.insert versionKey (String "1") hm
           Object hm = toJSON $ subtractRequestNamed [("x", Number 4)] nonNullId
 
-testNoResponseToInvalidNotification :: Assertion
-testNoResponseToInvalidNotification = runIdentity response @?= Nothing
-    where response = call (toMethods [subtractMethod]) $ encode request
-          request = TestRequest "12345" (Nothing :: Maybe ()) Nothing
-
 testBatch :: Assertion
 testBatch = sortBy (compare `on` fromIntId) (fromJust (fromByteString =<< runIdentity response)) @?= expected
        where expected = [TestResponse i1 (Right $ Number 2), TestResponse i2 (Right $ Number 4)]
@@ -126,32 +136,6 @@ testAllowMissingVersion = (fromByteString =<< runIdentity response) @?= (Just $ 
           Object hm = toJSON $ subtractRequestNamed [("x", Number 1)] i
           response = call (toMethods [subtractMethod]) $ encode requestNoVersion
           i = idNumber (-1)
-
-testAllowExtraNamedArg :: Assertion
-testAllowExtraNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number (-10)))
-    where response = call (toMethods [subtractMethod]) $ encode request
-          request = subtractRequestNamed args i
-          args = [("x", Number 10), ("y", Number 20), ("z", String "extra")]
-          i = idString "ID"
-
-testDefaultNamedArg :: Assertion
-testDefaultNamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 1000))
-    where response = call (toMethods [subtractMethod]) $ encode request
-          request = subtractRequestNamed args i
-          args = [("x1", Number 500), ("x", Number 1000)]
-          i = idNumber 3
-
-testDefaultUnnamedArg :: Assertion
-testDefaultUnnamedArg = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse i (Right $ Number 4))
-    where response = call (toMethods [subtractMethod]) $ encode request
-          request = subtractRequestUnnamed [Number 4] i
-          i = idNumber 0
-
-testNullId :: Assertion
-testNullId = (fromByteString =<< runIdentity response) @?= (Just $ TestResponse idNull (Right $ Number (-80)))
-    where response = call (toMethods [subtractMethod]) $ encode request
-          request = subtractRequestNamed args idNull
-          args = [("y", Number 70), ("x", Number (-10))]
 
 testNoArgs :: Assertion
 testNoArgs = compareGetTimeResult Nothing
@@ -175,10 +159,10 @@ compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expecte
           i = idString "Id 1"
 
 subtractRequestNamed :: [(Text, Value)] -> TestId -> TestRequest
-subtractRequestNamed args i = TestRequest "subtract 1" (Just $ H.fromList args) (Just i)
+subtractRequestNamed args i = TestRequest "subtract" (Just $ H.fromList args) (Just i)
 
 subtractRequestUnnamed :: [Value] -> TestId -> TestRequest
-subtractRequestUnnamed args i = TestRequest "subtract 1" (Just args) (Just i)
+subtractRequestUnnamed args i = TestRequest "subtract" (Just args) (Just i)
 
 callSubtractMethods :: (ToJSON a, FromJSON b) => a -> Maybe b
 callSubtractMethods req = let methods :: Methods Identity
@@ -192,7 +176,7 @@ fromByteString str = case fromJSON <$> decode str of
                      _ -> Nothing
 
 subtractMethod :: Method Identity
-subtractMethod = toMethod "subtract 1" sub (Required "x" :+: Optional "y" 0 :+: ())
+subtractMethod = toMethod "subtract" sub (Required "x" :+: Optional "y" 0 :+: ())
             where sub :: Int -> Int -> RpcResult Identity Int
                   sub x y = return (x - y)
 
