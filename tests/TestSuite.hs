@@ -8,7 +8,7 @@ import qualified TestParallelism as P
 import Data.Maybe
 import Data.List (sortBy)
 import Data.Function (on)
-import Data.Aeson
+import Data.Aeson as A
 import Data.Aeson.Types
 import Data.Text (Text)
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -20,11 +20,16 @@ import Control.Monad.Identity
 import Test.HUnit hiding (State)
 import Test.Framework
 import Test.Framework.Providers.HUnit
+import Prelude hiding (subtract)
 
 main :: IO ()
-main = defaultMain [ testCase "encode RPC error" testEncodeRpcError
+main = defaultMain [ testCase "encode RPC error" $
+                         fromByteString (encode $ rpcError (-1) "error") @?= Just (TestRpcError (-1) "error" Nothing)
 
-                   , testCase "encode error with data" testEncodeErrorWithData
+                   , let err = rpcErrorWithData 1 "my message" errData
+                         testError = TestRpcError 1 "my message" $ Just $ toJSON errData
+                         errData = ('\x03BB', [True], ())
+                     in testCase "encode error with data" $ fromByteString (encode err) @?= Just testError
 
                    , testCase "invalid JSON" $
                          assertSubtractResponse ("5" :: String) (errResponse idNull (-32700))
@@ -35,7 +40,8 @@ main = defaultMain [ testCase "encode RPC error" testEncodeRpcError
                    , testCase "empty batch call" $
                          assertSubtractResponse emptyArray (errResponse idNull (-32600))
 
-                   , testCase "invalid batch element" testInvalidBatchElement
+                   , testCase "invalid batch element" $
+                         map removeErrMsg <$> callSubtractMethods [True] @?= Just [errResponse idNull (-32600)]
 
                    , testCase "wrong version in request" testWrongVersion
 
@@ -69,9 +75,15 @@ main = defaultMain [ testCase "encode RPC error" testEncodeRpcError
                    , testCase "batch request" testBatch
                    , testCase "batch notifications" testBatchNotifications
                    , testCase "allow missing version" testAllowMissingVersion
-                   , testCase "no arguments" testNoArgs
-                   , testCase "empty argument array" testEmptyUnnamedArgs
-                   , testCase "empty argument object" testEmptyNamedArgs
+
+                   , testCase "no arguments" $
+                         assertGetTimeResponse (Nothing :: Maybe Value)
+
+                   , testCase "empty argument array" $
+                         assertGetTimeResponse $ Just (empty :: Array)
+
+                   , testCase "empty argument object" $
+                         assertGetTimeResponse $ Just (H.empty :: Object)
 
                    , let req = subtractRequestNamed [("x", Number 10), ("y", Number 20), ("z", String "extra")] nonNullId
                          rsp = TestResponse nonNullId $ Right $ Number (-10)
@@ -91,24 +103,9 @@ main = defaultMain [ testCase "encode RPC error" testEncodeRpcError
 
                    , testCase "parallelize tasks" P.testParallelizingTasks ]
 
-testEncodeRpcError :: Assertion
-testEncodeRpcError = fromByteString (encode err) @?= Just testError
-    where err = rpcError (-1) "error"
-          testError = TestRpcError (-1) "error" Nothing
-
-testEncodeErrorWithData :: Assertion
-testEncodeErrorWithData = fromByteString (encode err) @?= Just testError
-    where err = rpcErrorWithData 1 "my message" errorData
-          testError = TestRpcError 1 "my message" $ Just $ toJSON errorData
-          errorData = ('\x03BB', [True], ())
-
 assertSubtractResponse :: ToJSON a => a -> TestResponse -> Assertion
 assertSubtractResponse request expectedRsp = removeErrMsg <$> rsp @?= Just expectedRsp
     where rsp = callSubtractMethods request
-
-testInvalidBatchElement :: Assertion
-testInvalidBatchElement = map removeErrMsg <$> rsp @?= Just [errResponse idNull (-32600)]
-      where rsp = callSubtractMethods [True]
 
 testWrongVersion :: Assertion
 testWrongVersion = removeErrMsg <$> rsp @?= Just (errResponse idNull (-32600))
@@ -137,26 +134,17 @@ testAllowMissingVersion = (fromByteString =<< runIdentity response) @?= (Just $ 
           response = call (toMethods [subtractMethod]) $ encode requestNoVersion
           i = idNumber (-1)
 
-testNoArgs :: Assertion
-testNoArgs = compareGetTimeResult Nothing
-
-testEmptyUnnamedArgs :: Assertion
-testEmptyUnnamedArgs = compareGetTimeResult $ Just $ Right empty
-
-testEmptyNamedArgs :: Assertion
-testEmptyNamedArgs = compareGetTimeResult $ Just $ Left H.empty
-
 incrementStateMethod :: Method (State Int)
 incrementStateMethod = toMethod "increment" f ()
     where f :: RpcResult (State Int) ()
           f = lift $ modify (+1)
 
-compareGetTimeResult :: Maybe (Either Object Array) -> Assertion
-compareGetTimeResult requestArgs = assertEqual "unexpected rpc response" expected =<<
-                                   ((fromByteString . fromJust) <$> call (toMethods [getTimeMethod]) (encode getTimeRequest))
-    where expected = Just $ TestResponse i (Right $ Number 100)
-          getTimeRequest = TestRequest "get_time_seconds" requestArgs (Just i)
-          i = idString "Id 1"
+assertGetTimeResponse :: ToJSON a => a -> Assertion
+assertGetTimeResponse args = passed @? "unexpected RPC response"
+    where passed = (expected ==) <$> rsp
+          expected = Just $ TestResponse nonNullId (Right $ Number 100)
+          req = TestRequest "get_time_seconds" (Just args) (Just nonNullId)
+          rsp = callGetTimeMethod req
 
 subtractRequestNamed :: [(Text, Value)] -> TestId -> TestRequest
 subtractRequestNamed args i = TestRequest "subtract" (Just $ H.fromList args) (Just i)
@@ -170,28 +158,31 @@ callSubtractMethods req = let methods :: Methods Identity
                               rsp = call methods $ encode req
                           in fromByteString =<< runIdentity rsp
 
+callGetTimeMethod :: TestRequest -> IO (Maybe TestResponse)
+callGetTimeMethod req = let methods :: Methods IO
+                            methods = toMethods [getTimeMethod]
+                            rsp = call methods $ encode req
+                        in (fromByteString =<<) <$> rsp
+
 fromByteString :: FromJSON a => B.ByteString -> Maybe a
 fromByteString str = case fromJSON <$> decode str of
                      Just (Success x) -> Just x
                      _ -> Nothing
 
 subtractMethod :: Method Identity
-subtractMethod = toMethod "subtract" sub (Required "x" :+: Optional "y" 0 :+: ())
-            where sub :: Int -> Int -> RpcResult Identity Int
-                  sub x y = return (x - y)
+subtractMethod = toMethod "subtract" subtract (Required "x" :+: Optional "y" 0 :+: ())
 
 flippedSubtractMethod :: Method Identity
-flippedSubtractMethod = toMethod "subtract 2" sub (Optional "y" (-1000) :+: Required "x" :+: ())
-            where sub :: Int -> Int -> RpcResult Identity Int
-                  sub y x = return (x - y)
+flippedSubtractMethod = toMethod "subtract 2" (flip subtract) params
+    where params = Optional "y" (-1000) :+: Required "x" :+: ()
+
+subtract :: Int -> Int -> RpcResult Identity Int
+subtract x y = return (x - y)
 
 getTimeMethod :: Method IO
-getTimeMethod = toMethod "get_time_seconds" getTime ()
-    where getTime :: RpcResult IO Integer
-          getTime = liftIO getTestTime
-
-getTestTime :: IO Integer
-getTestTime = return 100
+getTimeMethod = toMethod "get_time_seconds" getTestTime ()
+    where getTestTime :: RpcResult IO Integer
+          getTestTime = liftIO $ return 100
 
 removeErrMsg :: TestResponse -> TestResponse
 removeErrMsg (TestResponse i (Left (TestRpcError code _ _)))
