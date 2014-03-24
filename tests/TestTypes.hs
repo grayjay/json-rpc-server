@@ -10,6 +10,7 @@ module TestTypes ( TestRequest (..)
                  , idNull
                  , fromNumId
                  , fromJson
+                 , idKey
                  , versionKey) where
 
 import qualified Data.Aeson as A
@@ -21,9 +22,7 @@ import Data.HashMap.Strict (size)
 import Control.Applicative ((<$>), (<*>), (<|>), pure, empty)
 import Control.Monad (when, guard)
 
-data TestRpcError = TestRpcError { errCode :: Int
-                                 , errMsg :: Text
-                                 , errData :: Maybe A.Value}
+data TestRpcError = TestRpcError Int Text (Maybe A.Value)
                     deriving (Eq, Show)
 
 instance A.FromJSON TestRpcError where
@@ -38,7 +37,7 @@ data TestRequest = forall a. A.ToJSON a => TestRequest Text (Maybe a) (Maybe Tes
 instance A.ToJSON TestRequest where
     toJSON (TestRequest name params i) = A.object pairs
         where pairs = catMaybes [Just $ "method" .= name, idPair, paramsPair]
-              idPair = ("id" .=) <$> i
+              idPair = (idKey .=) <$> i
               paramsPair = ("params" .=) <$> params
 
 data TestResponse = TestResponse { rspId :: TestId
@@ -49,7 +48,7 @@ instance A.FromJSON TestResponse where
     parseJSON (A.Object obj) = do
       guard (size obj == 3)
       guard . (pack "2.0" ==) =<< obj .: versionKey
-      TestResponse <$> obj .: "id" <*>
+      TestResponse <$> obj .: idKey <*>
         ((Left <$> obj .: "error") <|> (Right <$> obj .: "result"))
     parseJSON _ = empty
 
@@ -88,3 +87,6 @@ instance A.ToJSON TestId where
 
 versionKey :: Text
 versionKey = "jsonrpc"
+
+idKey :: Text
+idKey = "id"
