@@ -110,11 +110,17 @@ instance A.FromJSON Request where
                            (Request <$>
                            x .: "method" <*>
                            (parseParams =<< x .:? "params" .!= emptyObject) <*>
-                           (Just <$> x .: idKey <|> return Nothing)) -- (.:?) parses Null value as Nothing
+                           parseId)
         where parseParams (A.Object obj) = return $ Left obj
               parseParams (A.Array ar) = return $ Right ar
               parseParams _ = empty
               checkVersion ver = when (ver /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack ver)
+               -- (.:?) parses Null value as Nothing so parseId needs
+               -- to use both (.:?) and (.:) to handle all cases
+              parseId = x .:? idKey >>= \optional ->
+                        case optional of
+                          Nothing -> Just <$> (x .: idKey) <|> return Nothing
+                          _ -> return optional
     parseJSON _ = empty
 
 data Response = Response Id (Either RpcError A.Value)
