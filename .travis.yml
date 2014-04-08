@@ -57,6 +57,10 @@ before_install:
 
    esac
 
+   if [ -n "$AESONVER" ]; then
+      echo "constraints:aeson=="$AESONVER >> cabal.config;
+   fi
+
  - sudo add-apt-repository -y ppa:hvr/ghc
  - sudo apt-get update
  - sudo apt-get install cabal-install-1.18 ghc-$GHCVER
@@ -64,9 +68,6 @@ before_install:
 
 install:
  - cabal-1.18 update
- - if [ -n "$AESONVER" ]; then
-       cabal-1.18 install aeson-$AESONVER;
-   fi
  - cabal-1.18 install --only-dependencies --enable-tests
 
 # Here starts the actual work to be performed for the package under
@@ -98,8 +99,6 @@ script:
 
  # build demo
  - cd ..;
-   cabal-1.18 install --only-dependencies -f demo;
- - cabal-1.18 configure -f demo
- - cabal-1.18 build
+   cabal-1.18 install -f demo;
 
 # EOF
