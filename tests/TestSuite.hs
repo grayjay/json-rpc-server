@@ -2,24 +2,27 @@
 
 module Main (main) where
 
-import Network.JsonRpc.Server
-import Internal
+import qualified Network.JsonRpc.Server as S
+import Network.JsonRpc.Server ((:+:) (..))
+import Internal ( request, defaultRq, defaultRsp
+                , defaultIdErrRsp, nullIdErrRsp
+                , version, result, rpcErr, method
+                , params, id', array, rspToIdString)
 import qualified TestParallelism
-import Data.Maybe
 import Data.List (sortBy)
+import qualified Data.Vector as V
 import Data.Function (on)
 import qualified Data.Aeson as A
 import Data.Aeson ((.=))
 import qualified Data.Aeson.Types as A
-import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.HashMap.Strict as H
-import Control.Applicative
-import Control.Monad.Trans
-import Control.Monad.State
-import Control.Monad.Identity
+import Control.Applicative ((<$>))
+import Control.Monad.Trans (liftIO)
+import Control.Monad.State (State, runState, lift, modify)
+import Control.Monad.Identity (Identity, runIdentity)
 import Test.HUnit hiding (State, Test)
-import Test.Framework
-import Test.Framework.Providers.HUnit
+import Test.Framework (defaultMain, Test)
+import Test.Framework.Providers.HUnit (testCase)
 import Prelude hiding (subtract)
 
 main :: IO ()
@@ -67,15 +70,17 @@ errorHandlingTests = [ testCase "invalid JSON" $
 
 otherTests :: [Test]
 otherTests = [ testCase "encode RPC error" $
-                   A.toJSON (rpcError (-1) "error") @?= rpcErr Nothing (-1) "error"
+                   A.toJSON (S.rpcError (-1) "error") @?= rpcErr Nothing (-1) "error"
 
-             , let err = rpcErrorWithData 1 "my message" errData
+             , let err = S.rpcErrorWithData 1 "my message" errData
                    testError = rpcErr (Just $ A.toJSON errData) 1 "my message"
                    errData = ('\x03BB', [True], ())
                in testCase "encode RPC error with data" $ A.toJSON err @?= testError
 
              , testCase "batch request" testBatch
+
              , testCase "batch notifications" testBatchNotifications
+
              , testCase "allow missing version" testAllowMissingVersion
 
              , testCase "no arguments" $ assertGetTimeResponse Nothing
@@ -84,7 +89,8 @@ otherTests = [ testCase "encode RPC error" $
 
              , testCase "empty argument A.object" $ assertGetTimeResponse $ Just A.emptyObject
 
-             , let req = defaultRq `params` (Just $ A.object ["x" .= A.Number 10, "y" .= A.Number 20, "z" .= A.String "extra"])
+             , let req = defaultRq `params` Just args
+                   args = A.object ["x" .= A.Number 10, "y" .= A.Number 20, "z" .= A.String "extra"]
                    rsp = defaultRsp `result` A.Number (-10)
                in testCase "allow extra named argument" $ assertSubtractResponse req rsp
 
@@ -113,32 +119,31 @@ assertInvalidParams :: A.Value -> Assertion
 assertInvalidParams req = assertSubtractResponse req (defaultIdErrRsp (-32602))
 
 testBatch :: Assertion
-testBatch = sortBy (compare `on` idToString) <$> response @?= Just expected
-       where expected = [rsp i1 2, rsp i2 4]
+testBatch = sortBy (compare `on` rspToIdString) <$> response @?= Just expected
+       where expected = [nullIdErrRsp (-32600), rsp i1 2, rsp i2 4] 
                  where rsp i x = defaultRsp `id'` Just i `result` A.Number x
-             response = A.decode =<< runIdentity (call (toMethods [subtractMethod]) $ A.encode requests)
-             requests = [rq i1 10 8, rq i2 24 20]
+             response = fromArray =<< (removeErrMsg <$> callSubtractMethods (array requests))
+             requests = [rq i1 10 8, rq i2 24 20, defaultRq `version` Just (A.String "abc")]
                  where rq i x y = defaultRq `id'` Just i `params` toArgs x y
              toArgs :: Int -> Int -> Maybe A.Value
              toArgs x y = Just $ A.object ["x" .= x, "y" .= y]
              i1 = A.Number 1
              i2 = A.Number 2
-             idToString :: A.Value -> Maybe String
-             idToString (A.Object rsp) = show <$> H.lookup idKey rsp
-             idToString _ = Nothing
+             fromArray (A.Array v) = Just $ V.toList v
+             fromArray _ = Nothing
 
 testBatchNotifications :: Assertion
 testBatchNotifications = runState response 0 @?= (Nothing, 10)
-    where response = call (toMethods [incrementStateMethod]) $ A.encode rq
+    where response = S.call (S.toMethods [incrementStateMethod]) $ A.encode rq
           rq = replicate 10 $ request Nothing "increment" Nothing
 
 testAllowMissingVersion :: Assertion
 testAllowMissingVersion = callSubtractMethods requestNoVersion @?= (Just $ defaultRsp `result` A.Number 1)
     where requestNoVersion = defaultRq `version` Nothing `params` Just (A.object ["x" .= A.Number 1])
 
-incrementStateMethod :: Method (State Int)
-incrementStateMethod = toMethod "increment" f ()
-    where f :: RpcResult (State Int) ()
+incrementStateMethod :: S.Method (State Int)
+incrementStateMethod = S.toMethod "increment" f ()
+    where f :: S.RpcResult (State Int) ()
           f = lift $ modify (+1)
 
 assertGetTimeResponse :: Maybe A.Value -> Assertion
@@ -149,40 +154,35 @@ assertGetTimeResponse args = passed @? "unexpected RPC response"
           rsp = callGetTimeMethod req
 
 callSubtractMethods :: A.Value -> Maybe A.Value
-callSubtractMethods req = let methods :: Methods Identity
-                              methods = toMethods [subtractMethod, flippedSubtractMethod]
-                              rsp = call methods $ A.encode req
-                          in fromByteString =<< runIdentity rsp
+callSubtractMethods req = let methods :: S.Methods Identity
+                              methods = S.toMethods [subtractMethod, flippedSubtractMethod]
+                              rsp = S.call methods $ A.encode req
+                          in A.decode =<< runIdentity rsp
 
 callGetTimeMethod :: A.Value -> IO (Maybe A.Value)
-callGetTimeMethod req = let methods :: Methods IO
-                            methods = toMethods [getTimeMethod]
-                            rsp = call methods $ A.encode req
-                        in (fromByteString =<<) <$> rsp
+callGetTimeMethod req = let methods :: S.Methods IO
+                            methods = S.toMethods [getTimeMethod]
+                            rsp = S.call methods $ A.encode req
+                        in (A.decode =<<) <$> rsp
 
-fromByteString :: A.FromJSON a => B.ByteString -> Maybe a
-fromByteString str = case A.fromJSON <$> A.decode str of
-                     Just (A.Success x) -> Just x
-                     _ -> Nothing
+subtractMethod :: S.Method Identity
+subtractMethod = S.toMethod "subtract" subtract (S.Required "x" :+: S.Optional "y" 0 :+: ())
 
-subtractMethod :: Method Identity
-subtractMethod = toMethod "subtract" subtract (Required "x" :+: Optional "y" 0 :+: ())
+flippedSubtractMethod :: S.Method Identity
+flippedSubtractMethod = S.toMethod "flipped subtract" (flip subtract) ps
+    where ps = S.Optional "y" (-1000) :+: S.Required "x" :+: ()
 
-flippedSubtractMethod :: Method Identity
-flippedSubtractMethod = toMethod "flipped subtract" (flip subtract) ps
-    where ps = Optional "y" (-1000) :+: Required "x" :+: ()
-
-subtract :: Int -> Int -> RpcResult Identity Int
+subtract :: Int -> Int -> S.RpcResult Identity Int
 subtract x y = return (x - y)
 
-getTimeMethod :: Method IO
-getTimeMethod = toMethod "get_time_seconds" getTestTime ()
-    where getTestTime :: RpcResult IO Integer
+getTimeMethod :: S.Method IO
+getTimeMethod = S.toMethod "get_time_seconds" getTestTime ()
+    where getTestTime :: S.RpcResult IO Integer
           getTestTime = liftIO $ return 100
 
 removeErrMsg :: A.Value -> A.Value
-removeErrMsg (A.Object rsp) = A.Object $ H.adjust removeMsg errKey rsp
-    where removeMsg (A.Object err) = A.Object $ H.insert msgKey "" $ H.delete dataKey err
+removeErrMsg (A.Object rsp) = A.Object $ H.adjust removeMsg "error" rsp
+    where removeMsg (A.Object err) = A.Object $ H.insert "message" "" $ H.delete "data" err
           removeMsg v = v
 removeErrMsg (A.Array rsps) = A.Array $ removeErrMsg <$> rsps
 removeErrMsg v = v
