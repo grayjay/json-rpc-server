@@ -3,9 +3,11 @@
 module TestParallelism (testParallelizingTasks) where
 
 import Network.JsonRpc.Server
-import TestTypes
+import Internal
 import Data.List (sort)
 import qualified Data.Aeson as A
+import Data.Aeson ((.=))
+import qualified Data.Aeson.Types as A
 import Data.Maybe (fromJust)
 import qualified Data.HashMap.Strict as H
 import Control.Applicative ((<$>))
@@ -33,18 +35,17 @@ testParallelizingTasks = do
                            , unlockRequest 'A']
           createMethods lock = toMethods [lockMethod lock, unlockMethod lock]
 
-rspToIntId :: TestResponse -> Maybe Int
-rspToIntId = fromNumId . rspId
+rspToIntId :: A.Value -> Maybe Int
+rspToIntId (A.Object rsp) = fromJson =<< H.lookup idKey rsp
 
-rspToCharResult :: TestResponse -> Maybe Char
-rspToCharResult rsp = let (Right r) = rspResult rsp
-                      in fromJust $ fromJson r
+rspToCharResult :: A.Value -> Maybe Char
+rspToCharResult (A.Object rsp) = fromJson =<< H.lookup resultKey rsp
 
-lockRequest :: Int -> TestRequest
-lockRequest i = TestRequest "lock" (Nothing :: Maybe ()) (Just $ idNumber i)
+lockRequest :: Int -> A.Value
+lockRequest i = request2_0 (Just $ A.toJSON i) "lock" $ Just A.emptyObject
 
-unlockRequest :: Char -> TestRequest
-unlockRequest ch = TestRequest "unlock" (Just $ H.fromList [("value" :: String, ch)]) Nothing
+unlockRequest :: Char -> A.Value
+unlockRequest ch = request2_0 Nothing "unlock" $ Just $ A.object ["value" .= ch]
 
 lockMethod :: MVar Char -> Method IO
 lockMethod lock = toMethod "lock" f ()
