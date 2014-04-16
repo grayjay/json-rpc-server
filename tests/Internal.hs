@@ -2,16 +2,21 @@
              ExistentialQuantification #-}
 
 module Internal ( request
-                , request2_0
-                , idRequest
-                , successRsp
-                , idSuccessRsp
                 , errRsp
                 , rpcErr
-                , idErrRsp
+                , defaultIdErrRsp
+                , nullIdErrRsp
                 , fromJson
                 , array
+                , defaultRq
+                , defaultRsp
+                , method
+                , params
+                , id'
+                , version
+                , result
                 , defaultId
+                , defaultResult
                 , errKey
                 , dataKey
                 , msgKey
@@ -21,6 +26,7 @@ module Internal ( request
 
 import qualified Data.Aeson as A
 import Data.Aeson ((.=))
+import qualified Data.HashMap.Strict as H
 import Data.Maybe (catMaybes)
 import qualified Data.Vector as V
 import Data.Text (Text)
@@ -34,26 +40,39 @@ fromJson v = case A.fromJSON v of
 array :: [A.Value] -> A.Value
 array = A.Array . V.fromList
 
-idRequest :: Text -> Maybe A.Value -> A.Value
-idRequest = request2_0 (Just defaultId)
+defaultRq :: A.Value
+defaultRq = request (Just defaultId) "subtract" args
+    where args = Just $ A.object ["x" .= A.Number 1, "y" .= A.Number 2]
 
-request2_0 :: Maybe A.Value -> Text -> Maybe A.Value -> A.Value
-request2_0 i = request (Just version) i . A.String
+method :: A.Value -> Text -> A.Value
+method rq m = insert rq "method" $ Just $ A.String m
 
-request :: Maybe Text -> Maybe A.Value -> A.Value -> Maybe A.Value -> A.Value
-request ver i method args = A.object $ catMaybes [ Just $ "method" .= method
-                                                 , ("params" .=) <$> args
-                                                 , (idKey .=) <$> i
-                                                 , (versionKey .=) <$> ver ]
+params :: A.Value -> Maybe A.Value -> A.Value
+params rq = insert rq "params"
 
-idSuccessRsp :: A.Value -> A.Value
-idSuccessRsp = successRsp defaultId
+id' :: A.Value -> Maybe A.Value -> A.Value
+id' rq = insert rq "id"
 
-successRsp :: A.Value -> A.Value -> A.Value
-successRsp i = response i "result"
+version :: A.Value -> Maybe A.Value -> A.Value
+version rq = insert rq "jsonrpc"
 
-idErrRsp :: Int -> A.Value
-idErrRsp = errRsp defaultId
+request :: Maybe A.Value -> Text -> Maybe A.Value -> A.Value
+request i m args = A.object $ catMaybes [ Just $ "method" .= A.String m
+                                        , ("params" .=) <$> args
+                                        , (idKey .=) <$> i
+                                        , Just (versionKey .= defaultVersion)]
+
+defaultRsp :: A.Value
+defaultRsp = response defaultId "result" defaultResult
+
+result :: A.Value -> A.Value -> A.Value
+result rsp = insert rsp "result" . Just
+
+defaultIdErrRsp :: Int -> A.Value
+defaultIdErrRsp = errRsp defaultId
+
+nullIdErrRsp :: Int -> A.Value
+nullIdErrRsp = errRsp A.Null
 
 errRsp :: A.Value -> Int -> A.Value
 errRsp i code = response i errKey $ rpcErr Nothing code ""
@@ -63,10 +82,18 @@ rpcErr d code msg = A.object $ ["code" .= code, msgKey .= msg] ++ dataPair
     where dataPair = catMaybes [(dataKey .=) <$> d]
 
 response :: A.Value -> Text -> A.Value -> A.Value
-response i key result = A.object [idKey .= i, key .= result, versionKey .= version]
+response i key res = A.object [idKey .= i, key .= res, versionKey .= defaultVersion]
+
+insert :: A.Value -> Text -> Maybe A.Value -> A.Value
+insert (A.Object obj) key Nothing = A.Object $ H.delete key obj
+insert (A.Object obj) key (Just val) = A.Object $ H.insert key val obj
+insert v _ _ = v
 
 defaultId :: A.Value
 defaultId = A.Number 3
+
+defaultResult :: A.Value
+defaultResult = A.Number (-1)
 
 versionKey :: Text
 versionKey = "jsonrpc"
@@ -86,5 +113,5 @@ msgKey = "message"
 dataKey :: Text
 dataKey = "data"
 
-version :: Text
-version = "2.0"
+defaultVersion :: Text
+defaultVersion = "2.0"

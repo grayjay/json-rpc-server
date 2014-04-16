@@ -37,15 +37,17 @@ testParallelizingTasks = do
 
 rspToIntId :: A.Value -> Maybe Int
 rspToIntId (A.Object rsp) = fromJson =<< H.lookup idKey rsp
+rspToIntId _ = Nothing
 
 rspToCharResult :: A.Value -> Maybe Char
 rspToCharResult (A.Object rsp) = fromJson =<< H.lookup resultKey rsp
+rspToCharResult _ = Nothing
 
 lockRequest :: Int -> A.Value
-lockRequest i = request2_0 (Just $ A.toJSON i) "lock" $ Just A.emptyObject
+lockRequest i = request (Just $ A.Number $ fromIntegral i) "lock" $ Just A.emptyObject
 
 unlockRequest :: Char -> A.Value
-unlockRequest ch = request2_0 Nothing "unlock" $ Just $ A.object ["value" .= ch]
+unlockRequest ch = request Nothing "unlock" $ Just $ A.object ["value" .= ch]
 
 lockMethod :: MVar Char -> Method IO
 lockMethod lock = toMethod "lock" f ()
