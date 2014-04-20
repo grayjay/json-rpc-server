@@ -123,8 +123,8 @@ testBatch = sortBy (compare `on` rspToIdString) <$> response @?= Just expected
        where expected = [nullIdErrRsp (-32600), rsp i1 2, rsp i2 4] 
                  where rsp i x = defaultRsp `id'` Just i `result` A.Number x
              response = fromArray =<< (removeErrMsg <$> callSubtractMethods (array requests))
-             requests = [rq i1 10 8, rq i2 24 20, defaultRq `version` Just (A.String "abc")]
-                 where rq i x y = defaultRq `id'` Just i `params` toArgs x y
+             requests = [rq (Just i1) 10 8, rq (Just i2) 24 20, rq Nothing 15 1, defaultRq `version` Just (A.String "abc")]
+                 where rq i x y = defaultRq `id'` i `params` toArgs x y
              toArgs :: Int -> Int -> Maybe A.Value
              toArgs x y = Just $ A.object ["x" .= x, "y" .= y]
              i1 = A.Number 1
