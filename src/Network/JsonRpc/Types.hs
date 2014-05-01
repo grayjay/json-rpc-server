@@ -3,6 +3,7 @@
              FlexibleInstances,
              UndecidableInstances,
              TypeOperators,
+             TypeSynonymInstances,
              OverloadedStrings #-}
 
 module Network.JsonRpc.Types ( RpcResult
@@ -27,7 +28,7 @@ import Data.Aeson.Types (emptyObject)
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.Applicative ((<$>), (<*>), (<|>), (*>), empty)
-import Control.Monad (when)
+import Control.Monad (mplus, when)
 import Control.Monad.Error (Error, ErrorT, throwError, strMsg, noMsg)
 import Prelude hiding (length)
 
@@ -61,7 +62,7 @@ instance (Monad m, Functor m, A.ToJSON r) => MethodParams (RpcResult m r) () m r
 instance (A.FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
     apply f (param :+: ps) args = arg >>= \a -> apply (f a) ps nextArgs
         where arg = either (parseArg name) return =<<
-                    (Left <$> lookupValue <|> Right <$> paramDefault param)
+                    (Left <$> lookupValue) `mplus` (Right <$> paramDefault param)
               lookupValue = either (lookupArg name) (headArg name) args
               nextArgs = tailOrEmpty <$> args
               name = paramName param

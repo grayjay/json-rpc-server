@@ -184,5 +184,5 @@ removeErrMsg :: A.Value -> A.Value
 removeErrMsg (A.Object rsp) = A.Object $ H.adjust removeMsg "error" rsp
     where removeMsg (A.Object err) = A.Object $ H.insert "message" "" $ H.delete "data" err
           removeMsg v = v
-removeErrMsg (A.Array rsps) = A.Array $ removeErrMsg <$> rsps
+removeErrMsg (A.Array rsps) = A.Array $ removeErrMsg `V.map` rsps
 removeErrMsg v = v
