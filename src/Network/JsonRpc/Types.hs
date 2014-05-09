@@ -3,7 +3,6 @@
              FlexibleInstances,
              UndecidableInstances,
              TypeOperators,
-             PatternGuards,
              OverloadedStrings #-}
 
 module Network.JsonRpc.Types ( RpcResult
@@ -55,9 +54,9 @@ class (Monad m, Functor m, A.ToJSON r) => MethodParams f p m r | f -> p m r wher
     apply :: f -> p -> Args -> RpcResult m r
 
 instance (Monad m, Functor m, A.ToJSON r) => MethodParams (RpcResult m r) () m r where
-    apply r _ args | Left _ <- args = r
-                   | Right ar <- args, V.null ar = r
-                   | otherwise = throwError $ rpcError (-32602) "Too many unnamed arguments"
+    apply _ _ (Right ar) | not $ V.null ar =
+                             throwError $ rpcError (-32602) "Too many unnamed arguments"
+    apply res _ _ = res
 
 instance (A.FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
     apply f (param :+: ps) args = arg >>= \a -> apply (f a) ps nextArgs
@@ -81,15 +80,16 @@ tailOrEmpty vec = if V.null vec then V.empty else V.tail vec
 
 parseArg :: (Monad m, A.FromJSON r) => Text -> A.Value -> RpcResult m r
 parseArg name val = case A.fromJSON val of
-                      A.Error msg -> throwError $ rpcErrorWithData (-32602) ("Wrong type for argument: " `append` name) msg
+                      A.Error msg -> throwError $ argTypeError msg
                       A.Success x -> return x
+    where argTypeError = rpcErrorWithData (-32602) $ "Wrong type for argument: " `append` name
 
 paramDefault :: Monad m => Parameter a -> RpcResult m a
 paramDefault (Optional _ d) = return d
 paramDefault (Required name) = throwError $ missingArgError name
 
 missingArgError :: Text -> RpcError
-missingArgError name = rpcError (-32602) ("Cannot find required argument: " `append` name)
+missingArgError name = rpcError (-32602) $ "Cannot find required argument: " `append` name
 
 paramName :: Parameter a -> Text
 paramName (Optional n _) = n
@@ -114,7 +114,8 @@ instance A.FromJSON Request where
         where parseParams (A.Object obj) = return $ Left obj
               parseParams (A.Array ar) = return $ Right ar
               parseParams _ = empty
-              checkVersion ver = when (ver /= jsonRpcVersion) (fail $ "Wrong JSON RPC version: " ++ unpack ver)
+              checkVersion ver = when (ver /= jsonRpcVersion) $
+                            fail $ "Wrong JSON RPC version: " ++ unpack ver
                -- (.:?) parses Null value as Nothing so parseId needs
                -- to use both (.:?) and (.:) to handle all cases
               parseId = x .:? idKey >>= \optional ->

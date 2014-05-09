@@ -102,14 +102,14 @@ callWithBatchStrategy strategy fs input = either returnErr callMethod request
           parseJson = maybe invalidJson return . A.decode
           parseVal val = case val of
                            obj@(A.Object _) -> return $ Left obj
-                           A.Array vec | V.null vec -> throwError $ invalidRpcError "Empty batch request"
-                                     | otherwise -> return $ Right $ V.toList vec
-                           _ -> throwError $ invalidRpcError "Not a JSON object or array"
+                           A.Array vec | V.null vec -> throwInvalidRpc "Empty batch request"
+                                       | otherwise -> return $ Right $ V.toList vec
+                           _ -> throwInvalidRpc "Not a JSON object or array"
           callMethod rq = case rq of
                             Left val -> encodeJust `liftM` singleCall fs val
                             Right vals -> encodeJust `liftM` batchCall strategy fs vals
-              where encodeJust r = (A.encode . A.toJSON) <$> r
-          returnErr = return . Just . A.encode . A.toJSON . nullIdResponse
+              where encodeJust r = A.encode <$> r
+          returnErr = return . Just . A.encode . nullIdResponse
           invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
 
 singleCall :: Monad m => Methods m -> A.Value -> m (Maybe Response)
@@ -126,15 +126,15 @@ nullIdResponse err = toResponse (Just IdNull) (Left err :: Either RpcError ())
 
 parseValue :: (A.FromJSON a, Monad m) => A.Value -> RpcResult m a
 parseValue val = case A.fromJSON val of
-                   A.Error msg -> throwError $ invalidRpcError $ pack msg
+                   A.Error msg -> throwInvalidRpc $ pack msg
                    A.Success x -> return x
 
 lookupMethod :: Monad m => Text -> H.HashMap Text (Method m) -> RpcResult m (Method m)
 lookupMethod name = maybe notFound return . H.lookup name
-    where notFound = throwError $ rpcError (-32601) ("Method not found: " `append` name)
+    where notFound = throwError $ rpcError (-32601) $ "Method not found: " `append` name
 
-invalidRpcError :: Text -> RpcError
-invalidRpcError = rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
+throwInvalidRpc :: Monad m => Text -> RpcResult m a
+throwInvalidRpc = throwError . rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
 
 batchCall :: Monad m => (forall a. [m a] -> m [a])
           -> Methods m
