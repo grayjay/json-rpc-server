@@ -1,10 +1,15 @@
-{-# LANGUAGE MultiParamTypeClasses,
+{-# LANGUAGE CPP,
+             MultiParamTypeClasses,
              FunctionalDependencies,
              FlexibleInstances,
              UndecidableInstances,
              TypeOperators,
              TypeSynonymInstances,
              OverloadedStrings #-}
+
+#if MIN_VERSION_mtl(2,2,1)
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
+#endif
 
 module Network.JsonRpc.Types ( RpcResult
                              , Method (..)

@@ -1,7 +1,12 @@
-{-# LANGUAGE MultiParamTypeClasses,
+{-# LANGUAGE CPP,
+             MultiParamTypeClasses,
              Rank2Types,
              TypeOperators,
              OverloadedStrings #-}
+
+#if MIN_VERSION_mtl(2,2,1)
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
+#endif
 
 -- | Functions for implementing the server side of JSON RPC 2.0.
 --   See <http://www.jsonrpc.org/specification>.
@@ -40,8 +45,8 @@ import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.Applicative ((<$>))
 import Control.Monad (liftM)
-import Control.Monad.Identity (Identity, runIdentity)
-import Control.Monad.Error (ErrorT, runErrorT, throwError)
+import Control.Monad.Identity (runIdentity)
+import Control.Monad.Error (runErrorT, throwError)
 
 -- $instructions
 -- * Create methods by calling 'toMethod' and providing the method

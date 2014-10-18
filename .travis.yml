@@ -92,7 +92,7 @@ script:
 
  # this builds all libraries and executables
  # (including tests)
- - cabal-1.18 build
+ - cabal-1.18 build --ghc-options=-Werror
 
  - cabal-1.18 test
  - cabal-1.18 check
