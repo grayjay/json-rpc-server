@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                json-rpc-server
-version:             0.1.2.0
+version:             0.1.3.0
 license:             MIT
 license-file:        LICENSE
 category:            Network, JSON
@@ -34,7 +34,7 @@ library
                        aeson >=0.6 && <0.9,
                        bytestring >=0.9 && <0.11,
                        mtl >=1.1.1 && <2.3,
-                       text >=0.11 && <1.2,
+                       text >=0.11 && <1.3,
                        vector >=0.7.1 && <0.11,
                        unordered-containers >=0.1 && <0.3
   hs-source-dirs:      src
@@ -65,7 +65,7 @@ test-suite tests
                        aeson >=0.6 && <0.9,
                        bytestring >=0.9 && <0.11,
                        mtl >=1.1.1 && <2.3,
-                       text >=0.11 && <1.2,
+                       text >=0.11 && <1.3,
                        vector >=0.7.1 && <0.11,
                        unordered-containers >=0.1 && <0.3
   ghc-options:         -Wall
