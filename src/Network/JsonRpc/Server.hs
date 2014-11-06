@@ -8,7 +8,7 @@
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
 #endif
 
--- | Functions for implementing the server side of JSON RPC 2.0.
+-- | Functions for implementing the server side of JSON-RPC 2.0.
 --   See <http://www.jsonrpc.org/specification>.
 module Network.JsonRpc.Server (
                           -- ** Instructions
@@ -66,8 +66,9 @@ import Control.Monad.Error (runErrorT, throwError)
 -- optional parameters.
 
 -- $example
--- Here is an example of a simple Happstack server with three methods.
--- Compile it with the build flag @demo@.
+-- Here is an example with three JSON-RPC methods. It reads requests
+-- from stdin and writes responses to stdout.  Compile it with the
+-- build flag @demo@.
 --   
 -- > <insert Demo.hs>
 --   
@@ -83,21 +84,21 @@ toMethods :: [Method m] -> Methods m
 toMethods fs = Methods $ H.fromList $ map pair fs
     where pair mth@(Method name _) = (name, mth)
 
--- | Handles one JSON RPC request. It is the same as
+-- | Handles one JSON-RPC request. It is the same as
 --   @callWithBatchStrategy sequence@.
 call :: Monad m => Methods m   -- ^ Choice of methods to call.
-     -> B.ByteString           -- ^ JSON RPC request.
+     -> B.ByteString           -- ^ JSON-RPC request.
      -> m (Maybe B.ByteString) -- ^ The response wrapped in 'Just', or
                                --   'Nothing' in the case of a notification,
                                --   all wrapped in the given monad.
 call = callWithBatchStrategy sequence
 
--- | Handles one JSON RPC request.
+-- | Handles one JSON-RPC request.
 callWithBatchStrategy :: Monad m =>
                          (forall a . [m a] -> m [a]) -- ^ Function specifying the
                                                      --   evaluation strategy.
                       -> Methods m                   -- ^ Choice of methods to call.
-                      -> B.ByteString                -- ^ JSON RPC request.
+                      -> B.ByteString                -- ^ JSON-RPC request.
                       -> m (Maybe B.ByteString)      -- ^ The response wrapped in 'Just', or
                                                      --   'Nothing' in the case of a notification,
                                                      --   all wrapped in the given monad.
@@ -139,7 +140,7 @@ lookupMethod name = maybe notFound return . H.lookup name
     where notFound = throwError $ rpcError (-32601) $ "Method not found: " `append` name
 
 throwInvalidRpc :: Monad m => Text -> RpcResult m a
-throwInvalidRpc = throwError . rpcErrorWithData (-32600) "Invalid JSON RPC 2.0 request"
+throwInvalidRpc = throwError . rpcErrorWithData (-32600) "Invalid JSON-RPC 2.0 request"
 
 batchCall :: Monad m => (forall a. [m a] -> m [a])
           -> Methods m

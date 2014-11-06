@@ -121,7 +121,7 @@ instance A.FromJSON Request where
               parseParams (A.Array ar) = return $ Right ar
               parseParams _ = empty
               checkVersion ver = when (ver /= jsonRpcVersion) $
-                            fail $ "Wrong JSON RPC version: " ++ unpack ver
+                            fail $ "Wrong JSON-RPC version: " ++ unpack ver
                -- (.:?) parses Null value as Nothing so parseId needs
                -- to use both (.:?) and (.:) to handle all cases
               parseId = x .:? idKey >>= \optional ->

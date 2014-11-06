@@ -3,34 +3,35 @@
 module Main (main) where
 
 import Network.JsonRpc.Server
-import Happstack.Server.SimpleHTTP( ServerPartT, simpleHTTP, nullConf
-                                  , askRq, rqBody, unBody, toResponse)
+import qualified Data.ByteString.Lazy.Char8 as B
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
-import Control.Monad (when)
+import Control.Monad (forM_, when)
 import Control.Monad.Trans (liftIO)
 import Control.Monad.Error (throwError)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
-import Control.Concurrent.MVar (MVar, newMVar, readMVar, modifyMVar)
+import Control.Concurrent.MVar (MVar, newMVar, modifyMVar)
 
 main :: IO ()
-main = newMVar 0 >>= \count ->
-       simpleHTTP nullConf $ do
-         request <- askRq
-         body <- liftIO $ getBody request
-         result <- runReaderT (call methods body) count
-         let resultStr = fromMaybe "" result
-         return $ toResponse resultStr
-    where getBody r = unBody `fmap` readMVar (rqBody r)
+main = do
+  contents <- B.getContents
+  count <- newMVar 0
+  forM_ (B.lines contents) $ \request -> do
+         response <- runReaderT (call methods request) count
+         B.putStrLn $ fromMaybe "" response
 
-type Server = ReaderT (MVar Integer) (ServerPartT IO)
+type Server = ReaderT (MVar Integer) IO
 
 methods :: Methods Server
-methods = toMethods [printSequence, getCount, add]
+methods = toMethods [add, printSequence, increment]
 
-printSequence, getCount, add :: Method Server
+add, printSequence, increment :: Method Server
 
-printSequence = toMethod "print" f params
+add = toMethod "add" f (Required "x" :+: Required "y" :+: ())
+    where f :: Double -> Double -> RpcResult Server Double
+          f x y = liftIO $ return (x + y)
+
+printSequence = toMethod "print_sequence" f params
     where params = Required "string" :+:
                    Optional "count" 1 :+:
                    Optional "separator" ',' :+: ()
@@ -40,11 +41,7 @@ printSequence = toMethod "print" f params
               liftIO $ print $ intercalate [sep] $ replicate count str
           negativeCount = rpcError (-32000) "negative count"
 
-getCount = toMethod "get_count" f ()
+increment = toMethod "increment_and_get_count" f ()
     where f :: RpcResult Server Integer
           f = ask >>= \count -> liftIO $ modifyMVar count inc
               where inc x = return (x + 1, x + 1)
-
-add = toMethod "add" f (Required "x" :+: Required "y" :+: ())
-    where f :: Double -> Double -> RpcResult Server Double
-          f x y = liftIO $ return (x + y)

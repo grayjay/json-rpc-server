@@ -32,7 +32,7 @@ errorHandlingTests :: [Test]
 errorHandlingTests = [ testCase "invalid JSON" $
                            assertSubtractResponse (A.String "5") $ nullIdErrRsp (-32700)
 
-                     , testCase "invalid JSON RPC" $
+                     , testCase "invalid JSON-RPC" $
                            assertSubtractResponse (A.object ["id" .= A.Number 10]) $ nullIdErrRsp (-32600)
 
                      , testCase "empty batch call" $
