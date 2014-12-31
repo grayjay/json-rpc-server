@@ -20,7 +20,7 @@ module Network.JsonRpc.Types ( RpcResult
                              , Request (..)
                              , Response (..)
                              , Id (..)
-                             , RpcError
+                             , RpcError (..)
                              , rpcError
                              , rpcErrorWithData) where
 
@@ -56,7 +56,7 @@ infixr :+:
 --   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
-class (Monad m, Functor m, A.ToJSON r) => MethodParams f p m r | f -> p m r where
+class (Monad m, Functor m, A.ToJSON r) => MethodParams f p m r | f -> p m r, p m r -> f where
     apply :: f -> p -> Args -> RpcResult m r
 
 instance (Monad m, Functor m, A.ToJSON r) => MethodParams (RpcResult m r) () m r where
@@ -153,9 +153,11 @@ instance A.ToJSON Id where
     toJSON (IdNumber x) = x
     toJSON IdNull = A.Null
 
--- | Error to be returned to the client.
-data RpcError = RpcError Int Text (Maybe A.Value)
-              deriving Show
+-- | JSON-RPC error.
+data RpcError = RpcError { errCode :: Int
+                         , errMsg :: Text
+                         , errData :: Maybe A.Value }
+                           deriving (Show, Eq)
 
 instance Error RpcError where
     noMsg = strMsg "unknown error"
@@ -166,6 +168,13 @@ instance A.ToJSON RpcError where
         where pairs = catMaybes [ Just $ "code" .= code
                                 , Just $ "message" .= msg
                                 , ("data" .=) <$> data' ]
+
+instance A.FromJSON RpcError where
+    parseJSON = A.withObject "JSON-RPC error object" $
+                \v -> RpcError <$>
+                      v .: "code" <*>
+                      v .: "message" <*>
+                      v .:? "data"
 
 -- | Creates an 'RpcError' with the given error code and message.
 --   According to the specification, server error codes should be

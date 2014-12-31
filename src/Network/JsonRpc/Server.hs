@@ -32,7 +32,7 @@ module Network.JsonRpc.Server (
                            , (:+:) (..)
                            , MethodParams
                           -- ** Errors
-                           , RpcError
+                           , RpcError (..)
                            , rpcError
                            , rpcErrorWithData) where
 
