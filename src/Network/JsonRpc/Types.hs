@@ -113,10 +113,10 @@ data Request = Request Text Args (Maybe Id)
 
 instance A.FromJSON Request where
     parseJSON (A.Object x) = (checkVersion =<< x .:? versionKey .!= jsonRpcVersion) *>
-                           (Request <$>
-                           x .: "method" <*>
-                           (parseParams =<< x .:? "params" .!= emptyObject) <*>
-                           parseId)
+                             (Request <$>
+                              x .: "method" <*>
+                              (parseParams =<< x .:? "params" .!= emptyObject) <*>
+                              parseId)
         where parseParams (A.Object obj) = return $ Left obj
               parseParams (A.Array ar) = return $ Right ar
               parseParams _ = empty
@@ -170,11 +170,11 @@ instance A.ToJSON RpcError where
                                 , ("data" .=) <$> data' ]
 
 instance A.FromJSON RpcError where
-    parseJSON = A.withObject "JSON-RPC error object" $
-                \v -> RpcError <$>
-                      v .: "code" <*>
-                      v .: "message" <*>
-                      v .:? "data"
+    parseJSON (A.Object v) = RpcError <$>
+                             v .: "code" <*>
+                             v .: "message" <*>
+                             v .:? "data"
+    parseJSON _ = empty
 
 -- | Creates an 'RpcError' with the given error code and message.
 --   According to the specification, server error codes should be
