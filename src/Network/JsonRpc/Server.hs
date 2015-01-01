@@ -14,8 +14,8 @@ module Network.JsonRpc.Server (
                           -- ** Instructions
                           -- $instructions
 
-                          -- ** Unnamed and Optional Arguments
-                          -- $arguments
+                          -- ** Requests
+                          -- $requests
 
                           -- ** Example
                           -- $example
@@ -57,13 +57,15 @@ import Control.Monad.Error (runErrorT, throwError)
 -- * Process a request by calling 'call' or 'callWithBatchStrategy'
 --   on the 'Methods' and input 'B.ByteString'.
 
--- $arguments
--- RPC methods can have any mix of required and optional parameters.
--- When a request uses unnamed arguments, the function is applied to
--- the arguments in order.  The function will be called as long as
--- all required arguments are specified, and the number of arguments
--- provided is not greater than the total number of required and
--- optional parameters.
+-- $requests
+-- This library handles by-name and by-position arguments, batch and
+-- single requests, and notifications.  It also allows each
+-- parameter of a method to be either optional (with a default value)
+-- or required.  The function is called as long as all required
+-- arguments are present.  A request providing more positional
+-- arguments than the total number of optional and required
+-- parameters to a function results in an error.  However, additional
+-- by-name arguments are ignored.
 
 -- $example
 -- Here is an example with three JSON-RPC methods. It reads requests
