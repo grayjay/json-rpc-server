@@ -48,7 +48,6 @@ executable demo
                        json-rpc-server,
                        bytestring >=0.9 && <0.11,
                        mtl >=1.1.1 && <2.3
-    ghc-options:       -Wall
   else
     buildable:         False
 

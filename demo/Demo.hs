@@ -3,6 +3,7 @@
 module Main (main) where
 
 import Network.JsonRpc.Server
+import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 import qualified Data.ByteString.Lazy.Char8 as B
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
@@ -12,8 +13,8 @@ import Control.Monad.Error (throwError)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Concurrent.MVar (MVar, newMVar, modifyMVar)
 
-main :: IO ()
 main = do
+  hSetBuffering stdout LineBuffering
   contents <- B.getContents
   count <- newMVar 0
   forM_ (B.lines contents) $ \request -> do
