@@ -43,10 +43,13 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.Aeson as A
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
-import Control.Applicative ((<$>))
 import Control.Monad (liftM)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (runErrorT, throwError)
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative ((<$>))
+#endif
 
 -- $instructions
 -- * Create methods by calling 'toMethod' and providing the method

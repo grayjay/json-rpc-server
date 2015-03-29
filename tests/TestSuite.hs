@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP,
+             OverloadedStrings #-}
 
 module Main (main) where
 
@@ -16,7 +17,6 @@ import qualified Data.Aeson as A
 import Data.Aeson ((.=))
 import qualified Data.Aeson.Types as A
 import qualified Data.HashMap.Strict as H
-import Control.Applicative ((<$>))
 import Control.Monad.Trans (liftIO)
 import Control.Monad.State (State, runState, lift, modify)
 import Control.Monad.Identity (Identity, runIdentity)
@@ -24,6 +24,10 @@ import Test.HUnit hiding (State, Test)
 import Test.Framework (defaultMain, Test)
 import Test.Framework.Providers.HUnit (testCase)
 import Prelude hiding (subtract)
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative ((<$>))
+#endif
 
 main :: IO ()
 main = defaultMain $ errorHandlingTests ++ otherTests

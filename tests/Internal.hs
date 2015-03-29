@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP,
+             OverloadedStrings #-}
 
 module Internal ( request
                 , errRsp
@@ -21,7 +22,10 @@ import qualified Data.HashMap.Strict as H
 import Data.Maybe (catMaybes)
 import qualified Data.Vector as V
 import Data.Text (Text)
+
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>))
+#endif
 
 array :: [A.Value] -> A.Value
 array = A.Array . V.fromList

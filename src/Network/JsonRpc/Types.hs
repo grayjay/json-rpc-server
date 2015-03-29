@@ -32,10 +32,14 @@ import Data.Aeson ((.=), (.:), (.:?), (.!=))
 import Data.Aeson.Types (emptyObject)
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
-import Control.Applicative ((<$>), (<*>), (<|>), (*>), empty)
 import Control.Monad (mplus, when)
 import Control.Monad.Error (Error, ErrorT, throwError, strMsg, noMsg)
 import Prelude hiding (length)
+import Control.Applicative ((<|>), empty)
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative ((<$>), (<*>), (*>))
+#endif
 
 -- | Return type of a method. A method call can either fail with an 'RpcError'
 --   or succeed with a result of type 'r'.

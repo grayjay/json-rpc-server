@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP,
+             OverloadedStrings #-}
 
 module TestParallelism (testParallelizingTasks) where
 
@@ -11,11 +12,14 @@ import qualified Data.Aeson as A
 import Data.Aeson ((.=))
 import qualified Data.Aeson.Types as A
 import Data.Maybe (fromJust)
-import Control.Applicative ((<$>))
 import Control.Monad.Trans (liftIO)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, takeMVar)
 import Test.HUnit (Assertion, assert)
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative ((<$>))
+#endif
 
 -- | Tests parallelizing a batch request.  Each request either
 --   locks or unlocks an MVar.  The MVar is initially locked,
