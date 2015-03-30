@@ -18,6 +18,10 @@ description:         An implementation of the server side of JSON-RPC 2.0.
                      library uses 'ByteString' for input and output,
                      leaving the choice of transport up to the user.
                      See the "Network.JsonRpc.Server" module for an example.
+                     json-rpc-server can be used with
+                     <http://hackage.haskell.org/package/json-rpc-client json-rpc-client>
+                     to create a client and server that communicate
+                     with the same methods.
 
 source-repository head
   type:              git

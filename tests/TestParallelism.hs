@@ -41,7 +41,7 @@ testParallelizingTasks = do
 
 possibleResponses :: [[A.Value]]
 possibleResponses = (rsp <$>) <$> perms
-    where perms = zip `zipWith` repeat [1, 2, 3] $ permutations ["A", "B", "C"] 
+    where perms = map (zip [1, 2, 3]) $ permutations ["A", "B", "C"]
           rsp (i, r) = defaultRsp `result` A.String r `id'` Just (A.Number i)
 
 lockRequest :: Int -> A.Value

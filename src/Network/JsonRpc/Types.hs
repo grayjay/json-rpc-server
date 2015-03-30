@@ -138,7 +138,7 @@ instance A.FromJSON Request where
 data Response = Response Id (Either RpcError A.Value)
 
 instance NFData Response where
-    rnf (Response i e) = rnf i `seq` rnf e `seq` ()
+    rnf (Response i e) = rnf i `seq` rnf e
 
 instance A.ToJSON Response where
     toJSON (Response i result) = A.object pairs
@@ -151,8 +151,8 @@ instance A.ToJSON Response where
 data Id = IdString A.Value | IdNumber A.Value | IdNull
 
 instance NFData Id where
-    rnf (IdString s) = rnf s `seq` ()
-    rnf (IdNumber n) = rnf n `seq` ()
+    rnf (IdString s) = rnf s
+    rnf (IdNumber n) = rnf n
     rnf IdNull = ()
 
 instance A.FromJSON Id where
@@ -173,7 +173,7 @@ data RpcError = RpcError { errCode :: Int
                 deriving (Show, Eq)
 
 instance NFData RpcError where
-    rnf (RpcError e m d) = rnf e `seq` rnf m `seq` rnf d `seq` ()
+    rnf (RpcError e m d) = rnf e `seq` rnf m `seq` rnf d
 
 instance Error RpcError where
     noMsg = strMsg "unknown error"
