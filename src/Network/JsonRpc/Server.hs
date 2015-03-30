@@ -43,6 +43,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.Aeson as A
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
+import Control.DeepSeq (NFData)
 import Control.Monad (liftM)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.Error (runErrorT, throwError)
@@ -100,13 +101,13 @@ call = callWithBatchStrategy sequence
 
 -- | Handles one JSON-RPC request.
 callWithBatchStrategy :: Monad m =>
-                         (forall a . [m a] -> m [a]) -- ^ Function specifying the
-                                                     --   evaluation strategy.
-                      -> Methods m                   -- ^ Choice of methods to call.
-                      -> B.ByteString                -- ^ JSON-RPC request.
-                      -> m (Maybe B.ByteString)      -- ^ The response wrapped in 'Just', or
-                                                     --   'Nothing' in the case of a notification,
-                                                     --   all wrapped in the given monad.
+                         (forall a . NFData a => [m a] -> m [a]) -- ^ Function specifying the
+                                                                 --   evaluation strategy.
+                      -> Methods m                               -- ^ Choice of methods to call.
+                      -> B.ByteString                            -- ^ JSON-RPC request.
+                      -> m (Maybe B.ByteString)                  -- ^ The response wrapped in 'Just', or
+                                                                 --   'Nothing' in the case of a notification,
+                                                                 --   all wrapped in the given monad.
 callWithBatchStrategy strategy fs input = either returnErr callMethod request
     where request :: Either RpcError (Either A.Value [A.Value])
           request = runIdentity $ runErrorT $ parseVal =<< parseJson input
@@ -147,7 +148,7 @@ lookupMethod name = maybe notFound return . H.lookup name
 throwInvalidRpc :: Monad m => Text -> RpcResult m a
 throwInvalidRpc = throwError . rpcErrorWithData (-32600) "Invalid JSON-RPC 2.0 request"
 
-batchCall :: Monad m => (forall a. [m a] -> m [a])
+batchCall :: Monad m => (forall a. NFData a => [m a] -> m [a])
           -> Methods m
           -> [A.Value]
           -> m (Maybe [Response])

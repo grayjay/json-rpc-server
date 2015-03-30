@@ -32,6 +32,7 @@ import Data.Aeson ((.=), (.:), (.:?), (.!=))
 import Data.Aeson.Types (emptyObject)
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
+import Control.DeepSeq (NFData, rnf)
 import Control.Monad (mplus, when)
 import Control.Monad.Error (Error, ErrorT, throwError, strMsg, noMsg)
 import Prelude hiding (length)
@@ -136,6 +137,9 @@ instance A.FromJSON Request where
 
 data Response = Response Id (Either RpcError A.Value)
 
+instance NFData Response where
+    rnf (Response i e) = rnf i `seq` rnf e `seq` ()
+
 instance A.ToJSON Response where
     toJSON (Response i result) = A.object pairs
         where pairs = [ versionKey .= jsonRpcVersion
@@ -145,6 +149,11 @@ instance A.ToJSON Response where
 -- IdNumber cannot directly reference the type stored in A.Number,
 -- since it changes between aeson-0.6 and 0.7.
 data Id = IdString A.Value | IdNumber A.Value | IdNull
+
+instance NFData Id where
+    rnf (IdString s) = rnf s `seq` ()
+    rnf (IdNumber n) = rnf n `seq` ()
+    rnf IdNull = ()
 
 instance A.FromJSON Id where
     parseJSON x@(A.String _) = return $ IdString x
@@ -161,7 +170,10 @@ instance A.ToJSON Id where
 data RpcError = RpcError { errCode :: Int
                          , errMsg :: Text
                          , errData :: Maybe A.Value }
-                           deriving (Show, Eq)
+                deriving (Show, Eq)
+
+instance NFData RpcError where
+    rnf (RpcError e m d) = rnf e `seq` rnf m `seq` rnf d `seq` ()
 
 instance Error RpcError where
     noMsg = strMsg "unknown error"
