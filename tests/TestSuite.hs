@@ -17,6 +17,7 @@ import qualified Data.Aeson as A
 import Data.Aeson ((.=))
 import qualified Data.Aeson.Types as A
 import qualified Data.HashMap.Strict as H
+import qualified Data.ByteString.Lazy.Char8 as LB
 import Control.Monad.Trans (liftIO)
 import Control.Monad.State (State, runState, lift, modify)
 import Control.Monad.Identity (Identity, runIdentity)
@@ -34,7 +35,8 @@ main = defaultMain $ errorHandlingTests ++ otherTests
 
 errorHandlingTests :: [Test]
 errorHandlingTests = [ testCase "invalid JSON" $
-                           assertSubtractResponse (A.String "5") $ nullIdErrRsp (-32700)
+                           let rsp = runIdentity $ S.call (S.toMethods []) $ LB.pack "{"
+                           in removeErrMsg <$> (A.decode =<< rsp) @?= Just (nullIdErrRsp (-32700))
 
                      , testCase "invalid JSON-RPC" $
                            assertSubtractResponse (A.object ["id" .= A.Number 10]) $ nullIdErrRsp (-32600)
