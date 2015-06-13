@@ -62,15 +62,15 @@ infixr :+:
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
 class (Monad m, Functor m, A.ToJSON r) => MethodParams f p m r | f -> p m r, p m r -> f where
-    apply :: f -> p -> Args -> RpcResult m r
+    _apply :: f -> p -> Args -> RpcResult m r
 
 instance (Monad m, Functor m, A.ToJSON r) => MethodParams (RpcResult m r) () m r where
-    apply _ _ (Right ar) | not $ V.null ar =
+    _apply _ _ (Right ar) | not $ V.null ar =
                              throwError $ rpcError (-32602) "Too many unnamed arguments"
-    apply res _ _ = res
+    _apply res _ _ = res
 
 instance (A.FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
-    apply f (param :+: ps) args = arg >>= \a -> apply (f a) ps nextArgs
+    _apply f (param :+: ps) args = arg >>= \a -> _apply (f a) ps nextArgs
         where arg = either (parseArg name) return =<<
                     (Left <$> lookupValue) `mplus` (Right <$> paramDefault param)
               lookupValue = either (lookupArg name) (headArg name) args
