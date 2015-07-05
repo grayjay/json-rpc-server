@@ -9,7 +9,7 @@ import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
 import Control.Monad (forM_, when)
 import Control.Monad.Trans (liftIO)
-import Control.Monad.Error (throwError)
+import Control.Monad.Except (throwError)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Concurrent.MVar (MVar, newMVar, modifyMVar)
 

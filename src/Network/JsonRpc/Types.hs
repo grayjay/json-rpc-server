@@ -7,10 +7,6 @@
              TypeSynonymInstances,
              OverloadedStrings #-}
 
-#if MIN_VERSION_mtl(2,2,1)
-{-# OPTIONS_GHC -fno-warn-deprecations #-}
-#endif
-
 module Network.JsonRpc.Types ( RpcResult
                              , Method (..)
                              , Methods (..)
@@ -24,7 +20,6 @@ module Network.JsonRpc.Types ( RpcResult
                              , rpcError
                              , rpcErrorWithData) where
 
-import Data.String (fromString)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, append, unpack)
 import qualified Data.Aeson as A
@@ -33,8 +28,8 @@ import Data.Aeson.Types (emptyObject)
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.DeepSeq (NFData, rnf)
-import Control.Monad (mplus, when)
-import Control.Monad.Error (Error, ErrorT, throwError, strMsg, noMsg)
+import Control.Monad (when)
+import Control.Monad.Except (ExceptT (..), throwError)
 import Prelude hiding (length)
 import Control.Applicative ((<|>), empty)
 
@@ -44,7 +39,7 @@ import Control.Applicative ((<$>), (<*>), (*>))
 
 -- | Return type of a method. A method call can either fail with an 'RpcError'
 --   or succeed with a result of type 'r'.
-type RpcResult m r = ErrorT RpcError m r
+type RpcResult m r = ExceptT RpcError m r
 
 -- | Parameter expected by a method.
 data Parameter a
@@ -70,34 +65,23 @@ instance (Monad m, Functor m, A.ToJSON r) => MethodParams (RpcResult m r) () m r
     _apply res _ _ = res
 
 instance (A.FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p) m r where
-    _apply f (param :+: ps) args = arg >>= \a -> _apply (f a) ps nextArgs
-        where arg = either (parseArg name) return =<<
-                    (Left <$> lookupValue) `mplus` (Right <$> paramDefault param)
-              lookupValue = either (lookupArg name) (headArg name) args
-              nextArgs = tailOrEmpty <$> args
-              name = paramName param
+    _apply f (param :+: ps) args =
+        ExceptT (return arg) >>= \a -> _apply (f a) ps nextArgs
+      where
+        arg = maybe (paramDefault param) (parseArg name) lookupValue
+        lookupValue = either (H.lookup name) (V.!? 0) args
+        nextArgs = V.drop 1 <$> args
+        name = paramName param
 
-lookupArg :: Monad m => Text -> A.Object -> RpcResult m A.Value
-lookupArg name hm = case H.lookup name hm of
-                      Nothing -> throwError $ missingArgError name
-                      Just v -> return v
-
-headArg :: Monad m => Text -> A.Array -> RpcResult m A.Value
-headArg name vec | V.null vec = throwError $ missingArgError name
-                 | otherwise = return $ V.head vec
-
-tailOrEmpty :: A.Array -> A.Array
-tailOrEmpty vec = if V.null vec then V.empty else V.tail vec
-
-parseArg :: (Monad m, A.FromJSON r) => Text -> A.Value -> RpcResult m r
+parseArg :: A.FromJSON r => Text -> A.Value -> Either RpcError r
 parseArg name val = case A.fromJSON val of
                       A.Error msg -> throwError $ argTypeError msg
                       A.Success x -> return x
     where argTypeError = rpcErrorWithData (-32602) $ "Wrong type for argument: " `append` name
 
-paramDefault :: Monad m => Parameter a -> RpcResult m a
-paramDefault (Optional _ d) = return d
-paramDefault (Required name) = throwError $ missingArgError name
+paramDefault :: Parameter a -> Either RpcError a
+paramDefault (Optional _ d) = Right d
+paramDefault (Required name) = Left $ missingArgError name
 
 missingArgError :: Text -> RpcError
 missingArgError name = rpcError (-32602) $ "Cannot find required argument: " `append` name
@@ -174,10 +158,6 @@ data RpcError = RpcError { errCode :: Int
 
 instance NFData RpcError where
     rnf (RpcError e m d) = rnf e `seq` rnf m `seq` rnf d
-
-instance Error RpcError where
-    noMsg = strMsg "unknown error"
-    strMsg msg = RpcError (-32000) (fromString msg) Nothing
 
 instance A.ToJSON RpcError where
     toJSON (RpcError code msg data') = A.object pairs

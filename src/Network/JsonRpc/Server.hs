@@ -4,10 +4,6 @@
              TypeOperators,
              OverloadedStrings #-}
 
-#if MIN_VERSION_mtl(2,2,1)
-{-# OPTIONS_GHC -fno-warn-deprecations #-}
-#endif
-
 -- | Functions for implementing the server side of JSON-RPC 2.0.
 --   See <http://www.jsonrpc.org/specification>.
 module Network.JsonRpc.Server (
@@ -46,7 +42,7 @@ import qualified Data.HashMap.Strict as H
 import Control.DeepSeq (NFData)
 import Control.Monad (liftM)
 import Control.Monad.Identity (runIdentity)
-import Control.Monad.Error (runErrorT, throwError)
+import Control.Monad.Except (runExceptT, throwError)
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>))
@@ -110,7 +106,7 @@ callWithBatchStrategy :: Monad m =>
                                                                  --   all wrapped in the given monad.
 callWithBatchStrategy strategy fs input = either returnErr callMethod request
     where request :: Either RpcError (Either A.Value [A.Value])
-          request = runIdentity $ runErrorT $ parseVal =<< parseJson input
+          request = runIdentity $ runExceptT $ parseVal =<< parseJson input
           parseJson = maybe invalidJson return . A.decode
           parseVal val = case val of
                            obj@(A.Object _) -> return $ Left obj
@@ -128,9 +124,9 @@ singleCall :: Monad m => Methods m -> A.Value -> m (Maybe Response)
 singleCall (Methods fs) val = case parsed of
                                 Left err -> return $ nullIdResponse err
                                 Right (Request name args i) ->
-                                  toResponse i `liftM` runErrorT (applyMethodTo args =<< method)
+                                  toResponse i `liftM` runExceptT (applyMethodTo args =<< method)
                                     where method = lookupMethod name fs
-    where parsed = runIdentity $ runErrorT $ parseValue val
+    where parsed = runIdentity $ runExceptT $ parseValue val
           applyMethodTo args (Method _ f) = f args
 
 nullIdResponse :: RpcError -> Maybe Response
