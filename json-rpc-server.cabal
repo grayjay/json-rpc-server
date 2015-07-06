@@ -12,6 +12,8 @@ build-type:          Simple
 extra-source-files:  changelog.md
 cabal-version:       >=1.8
 tested-with:         GHC == 7.0.1, GHC == 7.6.2, GHC == 7.8.3, GHC == 7.10.1
+homepage:            https://github.com/grayjay/json-rpc-server
+bug-reports:         https://github.com/grayjay/json-rpc-server/issues
 description:         An implementation of the server side of JSON-RPC 2.0.
                      See <http://www.jsonrpc.org/specification>. This
                      library uses 'ByteString' for input and output,
@@ -24,7 +26,7 @@ description:         An implementation of the server side of JSON-RPC 2.0.
 
 source-repository head
   type:              git
-  location:          https://github.com/grayjay/json-rpc-server
+  location:          git://github.com/grayjay/json-rpc-server.git
 
 flag demo
   description:       Builds the JSON-RPC demo.
