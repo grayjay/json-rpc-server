@@ -37,7 +37,7 @@ testParallelizingTasks = do
                            , unlockRequest 'B'
                            , lockRequest 2
                            , unlockRequest 'A']
-          createMethods lock = S.toMethods [lockMethod lock, unlockMethod lock]
+          createMethods lock = [lockMethod lock, unlockMethod lock]
 
 possibleResponses :: [[A.Value]]
 possibleResponses = (rsp <$>) <$> perms

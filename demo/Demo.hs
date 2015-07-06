@@ -23,10 +23,8 @@ main = do
 
 type Server = ReaderT (MVar Integer) IO
 
-methods :: Methods Server
-methods = toMethods [add, printSequence, increment]
-
-add, printSequence, increment :: Method Server
+methods :: [Method Server]
+methods = [add, printSequence, increment]
 
 add = toMethod "add" f (Required "x" :+: Required "y" :+: ())
     where f :: Double -> Double -> RpcResult Server Double

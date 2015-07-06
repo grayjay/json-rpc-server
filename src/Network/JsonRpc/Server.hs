@@ -20,8 +20,6 @@ module Network.JsonRpc.Server (
                              RpcResult
                            , Method
                            , toMethod
-                           , Methods
-                           , toMethods
                            , call
                            , callWithBatchStrategy
                            , Parameter(..)
@@ -30,7 +28,10 @@ module Network.JsonRpc.Server (
                           -- ** Errors
                            , RpcError (..)
                            , rpcError
-                           , rpcErrorWithData) where
+                           , rpcErrorWithData
+                           -- ** Deprecated
+                           , Methods
+                           , toMethods) where
 
 import Network.JsonRpc.Types
 import Data.Text (Text, append, pack)
@@ -40,7 +41,7 @@ import qualified Data.Aeson as A
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as H
 import Control.DeepSeq (NFData)
-import Control.Monad (liftM)
+import Control.Monad (liftM, (<=<))
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.Except (runExceptT, throwError)
 
@@ -52,10 +53,8 @@ import Control.Applicative ((<$>))
 -- * Create methods by calling 'toMethod' and providing the method
 --   names, lists of parameters, and functions to be called.
 --
--- * Create a set of methods by calling 'toMethods'.
---
 -- * Process a request by calling 'call' or 'callWithBatchStrategy'
---   on the 'Methods' and input 'B.ByteString'.
+--   on the 'Method's and input 'B.ByteString'.
 
 -- $requests
 -- This library handles by-name and by-position arguments, batch and
@@ -78,54 +77,65 @@ import Control.Applicative ((<$>))
 -- | Creates a method from a name, function, and parameter descriptions.
 --   The parameter names must be unique.
 toMethod :: (MethodParams f p m r, A.ToJSON r, Monad m) => Text -> f -> p -> Method m
-toMethod name f params = let f' args = A.toJSON <$> _apply f params args
+toMethod name f params = let f' args = A.toJSON `liftM` _apply f params args
                          in Method name f'
 
--- | Creates a set of methods to be called by name. The names must be unique.
+type Methods m = [Method m]
+{-# DEPRECATED Methods "Use ['Method' m]." #-}
+
 toMethods :: [Method m] -> Methods m
-toMethods fs = Methods $ H.fromList $ map pair fs
-    where pair mth@(Method name _) = (name, mth)
+toMethods = id
+{-# DEPRECATED toMethods "Use 'call' directly." #-}
+
+type MethodMap m = H.HashMap Text (Method m)
 
 -- | Handles one JSON-RPC request. It is the same as
 --   @callWithBatchStrategy sequence@.
-call :: Monad m => Methods m   -- ^ Choice of methods to call.
+call :: Monad m => [Method m]  -- ^ Choice of methods to call.
      -> B.ByteString           -- ^ JSON-RPC request.
      -> m (Maybe B.ByteString) -- ^ The response wrapped in 'Just', or
                                --   'Nothing' in the case of a notification,
                                --   all wrapped in the given monad.
 call = callWithBatchStrategy sequence
 
--- | Handles one JSON-RPC request.
+-- | Handles one JSON-RPC request. The method names must be unique.
 callWithBatchStrategy :: Monad m =>
                          (forall a . NFData a => [m a] -> m [a]) -- ^ Function specifying the
                                                                  --   evaluation strategy.
-                      -> Methods m                               -- ^ Choice of methods to call.
+                      -> [Method m]                              -- ^ Choice of methods to call.
                       -> B.ByteString                            -- ^ JSON-RPC request.
                       -> m (Maybe B.ByteString)                  -- ^ The response wrapped in 'Just', or
                                                                  --   'Nothing' in the case of a notification,
                                                                  --   all wrapped in the given monad.
-callWithBatchStrategy strategy fs input = either returnErr callMethod request
-    where request :: Either RpcError (Either A.Value [A.Value])
-          request = runIdentity $ runExceptT $ parseVal =<< parseJson input
-          parseJson = maybe invalidJson return . A.decode
-          parseVal val = case val of
-                           obj@(A.Object _) -> return $ Left obj
-                           A.Array vec | V.null vec -> throwInvalidRpc "Empty batch request"
-                                       | otherwise -> return $ Right $ V.toList vec
-                           _ -> throwInvalidRpc "Not a JSON object or array"
-          callMethod rq = case rq of
-                            Left val -> encodeJust `liftM` singleCall fs val
-                            Right vals -> encodeJust `liftM` batchCall strategy fs vals
-              where encodeJust r = A.encode <$> r
-          returnErr = return . Just . A.encode . nullIdResponse
-          invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
+callWithBatchStrategy strategy methods =
+    mthMap `seq` either returnErr callMethod . parse
+  where
+    mthMap = H.fromList $
+             map (\mth@(Method name _) -> (name, mth)) methods
+    parse :: B.ByteString -> Either RpcError (Either A.Value [A.Value])
+    parse = runIdentity . runExceptT . parseVal <=< parseJson
+    parseJson = maybe invalidJson return . A.decode
+    parseVal val =
+        case val of
+          obj@(A.Object _) -> return $ Left obj
+          A.Array vec | V.null vec -> throwInvalidRpc "Empty batch request"
+                      | otherwise -> return $ Right $ V.toList vec
+          _ -> throwInvalidRpc "Not a JSON object or array"
+    callMethod rq =
+        case rq of
+          Left val -> encodeJust `liftM` singleCall mthMap val
+          Right vals -> encodeJust `liftM` batchCall strategy mthMap vals
+      where
+        encodeJust r = A.encode <$> r
+    returnErr = return . Just . A.encode . nullIdResponse
+    invalidJson = throwError $ rpcError (-32700) "Invalid JSON"
 
-singleCall :: Monad m => Methods m -> A.Value -> m (Maybe Response)
-singleCall (Methods fs) val = case parsed of
+singleCall :: Monad m => MethodMap m -> A.Value -> m (Maybe Response)
+singleCall methods val = case parsed of
                                 Left err -> return $ nullIdResponse err
                                 Right (Request name args i) ->
                                   toResponse i `liftM` runExceptT (applyMethodTo args =<< method)
-                                    where method = lookupMethod name fs
+                                    where method = lookupMethod name methods
     where parsed = runIdentity $ runExceptT $ parseValue val
           applyMethodTo args (Method _ f) = f args
 
@@ -137,7 +147,7 @@ parseValue val = case A.fromJSON val of
                    A.Error msg -> throwInvalidRpc $ pack msg
                    A.Success x -> return x
 
-lookupMethod :: Monad m => Text -> H.HashMap Text (Method m) -> RpcResult m (Method m)
+lookupMethod :: Monad m => Text -> MethodMap m -> RpcResult m (Method m)
 lookupMethod name = maybe notFound return . H.lookup name
     where notFound = throwError $ rpcError (-32601) $ "Method not found: " `append` name
 
@@ -145,11 +155,11 @@ throwInvalidRpc :: Monad m => Text -> RpcResult m a
 throwInvalidRpc = throwError . rpcErrorWithData (-32600) "Invalid JSON-RPC 2.0 request"
 
 batchCall :: Monad m => (forall a. NFData a => [m a] -> m [a])
-          -> Methods m
+          -> MethodMap m
           -> [A.Value]
           -> m (Maybe [Response])
-batchCall strategy mths vals = (noNull . catMaybes) `liftM` results
-    where results = strategy $ map (singleCall mths) vals
+batchCall strategy methods vals = (noNull . catMaybes) `liftM` results
+    where results = strategy $ map (singleCall methods) vals
           noNull rs = if null rs then Nothing else Just rs
 
 toResponse :: A.ToJSON a => Maybe Id -> Either RpcError a -> Maybe Response

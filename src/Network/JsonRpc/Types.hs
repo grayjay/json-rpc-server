@@ -9,7 +9,6 @@
 
 module Network.JsonRpc.Types ( RpcResult
                              , Method (..)
-                             , Methods (..)
                              , Parameter(..)
                              , (:+:) (..)
                              , MethodParams (..)
@@ -56,10 +55,10 @@ infixr :+:
 --   monad ('m'), and return type ('r'). 'p' has one 'Parameter' for
 --   every argument of 'f' and is terminated by @()@. The return type
 --   of 'f' is @RpcResult m r@. This class is treated as closed.
-class (Monad m, Functor m, A.ToJSON r) => MethodParams f p m r | f -> p m r, p m r -> f where
+class (Monad m, A.ToJSON r) => MethodParams f p m r | f -> p m r, p m r -> f where
     _apply :: f -> p -> Args -> RpcResult m r
 
-instance (Monad m, Functor m, A.ToJSON r) => MethodParams (RpcResult m r) () m r where
+instance (Monad m, A.ToJSON r) => MethodParams (RpcResult m r) () m r where
     _apply _ _ (Right ar) | not $ V.null ar =
                              throwError $ rpcError (-32602) "Too many unnamed arguments"
     _apply res _ _ = res
@@ -90,11 +89,8 @@ paramName :: Parameter a -> Text
 paramName (Optional n _) = n
 paramName (Required n) = n
 
--- | Single method.
+-- | A JSON-RPC method.
 data Method m = Method Text (Args -> RpcResult m A.Value)
-
--- | Multiple methods.
-newtype Methods m = Methods (H.HashMap Text (Method m))
 
 type Args = Either A.Object A.Array
 

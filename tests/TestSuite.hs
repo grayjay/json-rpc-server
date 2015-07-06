@@ -35,7 +35,7 @@ main = defaultMain $ errorHandlingTests ++ otherTests
 
 errorHandlingTests :: [Test]
 errorHandlingTests = [ testCase "invalid JSON" $
-                           let rsp = runIdentity $ S.call (S.toMethods []) $ LB.pack "{"
+                           let rsp = runIdentity $ S.call [] $ LB.pack "{"
                            in removeErrMsg <$> (A.decode =<< rsp) @?= Just (nullIdErrRsp (-32700))
 
                      , testCase "invalid JSON-RPC" $
@@ -140,7 +140,7 @@ testBatch = sortBy (compare `on` rspToIdString) <$> response @?= Just expected
 
 testBatchNotifications :: Assertion
 testBatchNotifications = runState response 0 @?= (Nothing, 10)
-    where response = S.call (S.toMethods [incrementStateMethod]) $ A.encode rq
+    where response = S.call [incrementStateMethod] $ A.encode rq
           rq = replicate 10 $ request Nothing "increment" Nothing
 
 testAllowMissingVersion :: Assertion
@@ -160,15 +160,13 @@ assertGetTimeResponse args = passed @? "unexpected RPC response"
           rsp = callGetTimeMethod req
 
 callSubtractMethods :: A.Value -> Maybe A.Value
-callSubtractMethods req = let methods :: S.Methods Identity
-                              methods = S.toMethods [subtractMethod, flippedSubtractMethod]
+callSubtractMethods req = let methods :: [S.Method Identity]
+                              methods = [subtractMethod, flippedSubtractMethod]
                               rsp = S.call methods $ A.encode req
                           in A.decode =<< runIdentity rsp
 
 callGetTimeMethod :: A.Value -> IO (Maybe A.Value)
-callGetTimeMethod req = let methods :: S.Methods IO
-                            methods = S.toMethods [getTimeMethod]
-                            rsp = S.call methods $ A.encode req
+callGetTimeMethod req = let rsp = S.call [getTimeMethod] $ A.encode req
                         in (A.decode =<<) <$> rsp
 
 subtractMethod :: S.Method Identity
