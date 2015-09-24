@@ -67,9 +67,10 @@ import Control.Applicative ((<$>))
 -- by-name arguments are ignored.
 
 -- $example
--- Here is an example with three JSON-RPC methods. It reads requests
--- from stdin and writes responses to stdout.  Compile it with the
--- build flag @demo@.
+-- Here is an example with three JSON-RPC methods that all have
+-- access to an 'MVar' counter.  The program reads requests from
+-- stdin and writes responses to stdout. Compile it with the build
+-- flag @demo@.
 --   
 -- > <insert Demo.hs>
 --   
