@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                json-rpc-server
-version:             0.2.2.0
+version:             0.2.3.0
 license:             MIT
 license-file:        LICENSE
 category:            Network, JSON
