@@ -75,7 +75,7 @@ import Control.Applicative ((<$>))
 
 -- | Creates a method from a name, function, and parameter descriptions.
 --   The parameter names must be unique.
-toMethod :: (MethodParams f p m r, A.ToJSON r, Monad m) => Text -> f -> p -> Method m
+toMethod :: (MethodParams f p m r) => Text -> f -> p -> Method m
 toMethod name f params = let f' args = A.toJSON `liftM` _apply f params args
                          in Method name f'
 
