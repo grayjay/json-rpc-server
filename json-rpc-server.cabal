@@ -52,6 +52,7 @@ library
                        OverloadedStrings,
                        Rank2Types,
                        TypeOperators,
+                       TypeSynonymInstances,
                        UndecidableInstances
 
 executable demo

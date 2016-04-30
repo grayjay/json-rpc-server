@@ -4,6 +4,7 @@
              FlexibleInstances,
              UndecidableInstances,
              TypeOperators,
+             TypeSynonymInstances,
              OverloadedStrings #-}
 
 module Network.JsonRpc.Types ( RpcResult
