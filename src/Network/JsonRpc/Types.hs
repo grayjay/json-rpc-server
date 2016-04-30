@@ -1,11 +1,11 @@
-{-# LANGUAGE CPP,
-             MultiParamTypeClasses,
-             FunctionalDependencies,
-             FlexibleInstances,
-             UndecidableInstances,
-             TypeOperators,
-             TypeSynonymInstances,
-             OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE MultiParamTypeClasses #-} -- required by GHC 7.0.1
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeSynonymInstances #-} -- required by GHC 7.0.1
+{-# LANGUAGE OverloadedStrings #-}
 
 module Network.JsonRpc.Types ( RpcResult
                              , Method (..)

@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP,
-             OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main (main) where
 

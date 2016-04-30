@@ -1,6 +1,6 @@
-{-# LANGUAGE CPP,
-             Rank2Types,
-             OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Functions for implementing the server side of JSON-RPC 2.0.
 --   See <http://www.jsonrpc.org/specification>.
