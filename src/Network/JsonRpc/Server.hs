@@ -1,7 +1,5 @@
 {-# LANGUAGE CPP,
-             MultiParamTypeClasses,
              Rank2Types,
-             TypeOperators,
              OverloadedStrings #-}
 
 -- | Functions for implementing the server side of JSON-RPC 2.0.

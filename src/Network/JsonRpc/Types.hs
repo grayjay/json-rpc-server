@@ -1,10 +1,8 @@
 {-# LANGUAGE CPP,
-             MultiParamTypeClasses,
              FunctionalDependencies,
              FlexibleInstances,
              UndecidableInstances,
              TypeOperators,
-             TypeSynonymInstances,
              OverloadedStrings #-}
 
 module Network.JsonRpc.Types ( RpcResult
