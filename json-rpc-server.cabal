@@ -37,8 +37,8 @@ flag demo
 library
   exposed-modules:     Network.JsonRpc.Server
   other-modules:       Network.JsonRpc.Types
-  build-depends:       base >=4.3 && <4.15,
-                       aeson >=0.6 && <1.6,
+  build-depends:       base >=4.3 && <4.16,
+                       aeson (>=0.6 && <1.6) || (>=2.1 && <2.2),
                        deepseq >= 1.1 && <1.5,
                        bytestring >=0.9 && <0.11,
                        mtl >=2.2.1 && <2.3,
