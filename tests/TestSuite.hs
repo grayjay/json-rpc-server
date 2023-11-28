@@ -16,11 +16,15 @@ import Data.Function (on)
 import qualified Data.Aeson as A
 import Data.Aeson ((.=))
 import qualified Data.Aeson.Types as A
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.KeyMap as H
+#else
 import qualified Data.HashMap.Strict as H
+#endif
 import qualified Data.ByteString.Lazy.Char8 as LB
 import Control.Monad.Trans (liftIO)
 import Control.Monad.State (State, runState, lift, modify)
-import Control.Monad.Identity (Identity, runIdentity)
+import Control.Monad.Identity (Identity(..), runIdentity)
 import Test.HUnit hiding (State, Test)
 import Test.Framework (defaultMain, Test)
 import Test.Framework.Providers.HUnit (testCase)
@@ -185,7 +189,7 @@ getTimeMethod = S.toMethod "get_time_seconds" getTestTime ()
           getTestTime = liftIO $ return 100
 
 removeErrMsg :: A.Value -> A.Value
-removeErrMsg (A.Object rsp) = A.Object $ H.adjust removeMsg "error" rsp
+removeErrMsg (A.Object rsp) = A.Object $ runIdentity $ H.alterF (Identity . fmap removeMsg) "error" rsp
     where removeMsg (A.Object err) = A.Object $ H.insert "message" "" $ H.delete "data" err
           removeMsg v = v
 removeErrMsg (A.Array rsps) = A.Array $ removeErrMsg `V.map` rsps

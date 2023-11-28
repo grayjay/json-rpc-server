@@ -20,12 +20,22 @@ module Network.JsonRpc.Types ( RpcResult
                              , rpcErrorWithData) where
 
 import Data.Maybe (catMaybes)
-import Data.Text (Text, append, unpack)
+import Data.Text (Text)
+#if ! MIN_VERSION_aeson(2,0,0)
+import Data.Text (unpack)
+#endif
 import qualified Data.Aeson as A
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.Key as A
+#endif
 import Data.Aeson ((.=), (.:), (.:?), (.!=))
 import Data.Aeson.Types (emptyObject)
 import qualified Data.Vector as V
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.KeyMap as KeyMap
+#else
 import qualified Data.HashMap.Strict as H
+#endif
 import Control.DeepSeq (NFData, rnf)
 import Control.Monad (when)
 import Control.Monad.Except (ExceptT (..), throwError)
@@ -68,7 +78,7 @@ instance (A.FromJSON a, MethodParams f p m r) => MethodParams (a -> f) (a :+: p)
         ExceptT (return arg) >>= \a -> _apply (f a) ps nextArgs
       where
         arg = maybe (paramDefault param) (parseArg name) lookupValue
-        lookupValue = either (H.lookup name) (V.!? 0) args
+        lookupValue = either (lookupInObject name) (V.!? 0) args
         nextArgs = V.drop 1 <$> args
         name = paramName param
 
@@ -76,14 +86,14 @@ parseArg :: A.FromJSON r => Text -> A.Value -> Either RpcError r
 parseArg name val = case A.fromJSON val of
                       A.Error msg -> throwError $ argTypeError msg
                       A.Success x -> return x
-    where argTypeError = rpcErrorWithData (-32602) $ "Wrong type for argument: " `append` name
+    where argTypeError = rpcErrorWithData (-32602) $ "Wrong type for argument: " <> name
 
 paramDefault :: Parameter a -> Either RpcError a
 paramDefault (Optional _ d) = Right d
 paramDefault (Required name) = Left $ missingArgError name
 
 missingArgError :: Text -> RpcError
-missingArgError name = rpcError (-32602) $ "Cannot find required argument: " `append` name
+missingArgError name = rpcError (-32602) $ "Cannot find required argument: " <> name
 
 paramName :: Parameter a -> Text
 paramName (Optional n _) = n
@@ -106,7 +116,7 @@ instance A.FromJSON Request where
               parseParams (A.Array ar) = return $ Right ar
               parseParams _ = empty
               checkVersion ver = when (ver /= jsonRpcVersion) $
-                            fail $ "Wrong JSON-RPC version: " ++ unpack ver
+                            fail $ "Wrong JSON-RPC version: " ++ unpackKey ver
                -- (.:?) parses Null value as Nothing so parseId needs
                -- to use both (.:?) and (.:) to handle all cases
               parseId = x .:? idKey >>= \optional ->
@@ -180,7 +190,25 @@ rpcError code msg = RpcError code msg Nothing
 rpcErrorWithData :: A.ToJSON a => Int -> Text -> a -> RpcError
 rpcErrorWithData code msg errorData = RpcError code msg $ Just $ A.toJSON errorData
 
+#if MIN_VERSION_aeson(2,0,0)
+jsonRpcVersion, versionKey, idKey :: A.Key
+#else
 jsonRpcVersion, versionKey, idKey :: Text
+#endif
 jsonRpcVersion = "2.0"
 versionKey = "jsonrpc"
 idKey = "id"
+
+#if MIN_VERSION_aeson(2,0,0)
+unpackKey :: A.Key -> String
+unpackKey = A.toString
+
+lookupInObject :: Text -> KeyMap.KeyMap A.Value -> Maybe A.Value
+lookupInObject key = KeyMap.lookup (A.fromText key)
+#else
+unpackKey :: Text -> String
+unpackKey = unpack
+
+lookupInObject :: Text -> H.HashMap Text A.Value -> Maybe A.Value
+lookupInObject = H.lookup
+#endif

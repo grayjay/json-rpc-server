@@ -18,7 +18,11 @@ module Internal ( request
 
 import qualified Data.Aeson as A
 import Data.Aeson ((.=))
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.KeyMap as H
+#else
 import qualified Data.HashMap.Strict as H
+#endif
 import Data.Maybe (catMaybes)
 import qualified Data.Vector as V
 import Data.Text (Text)
@@ -44,7 +48,7 @@ defaultRq :: A.Value
 defaultRq = request (Just defaultId) "subtract" args
     where args = Just $ A.object ["x" .= A.Number 1, "y" .= A.Number 2]
 
-response :: A.Value -> Text -> A.Value -> A.Value
+response :: A.Value -> Key -> A.Value -> A.Value
 response i key res = A.object ["id" .= i, key .= res, "jsonrpc" .= A.String "2.0"]
 
 defaultRsp :: A.Value
@@ -78,7 +82,7 @@ version rq = insert rq "jsonrpc"
 result :: A.Value -> A.Value -> A.Value
 result rsp = insert rsp "result" . Just
 
-insert :: A.Value -> Text -> Maybe A.Value -> A.Value
+insert :: A.Value -> Key -> Maybe A.Value -> A.Value
 insert (A.Object obj) key Nothing = A.Object $ H.delete key obj
 insert (A.Object obj) key (Just val) = A.Object $ H.insert key val obj
 insert v _ _ = v
@@ -88,3 +92,9 @@ defaultId = A.Number 3
 
 defaultResult :: A.Value
 defaultResult = A.Number (-1)
+
+#if MIN_VERSION_aeson(2,0,0)
+type Key = A.Key
+#else
+type Key = Text
+#endif
